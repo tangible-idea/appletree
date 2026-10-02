@@ -1,0 +1,40 @@
+import SwiftUI
+import AppKit
+import AppleTreeCore
+
+@main
+struct AppleTreeApp: App {
+    @StateObject private var store = AppStore()
+
+    var body: some Scene {
+        WindowGroup("AppleTree") {
+            ContentView().environmentObject(store)
+                .preferredColorScheme(.light)
+                .frame(minWidth: 1100, minHeight: 760)
+                .onAppear {
+                    NSApplication.shared.setActivationPolicy(.regular)
+                    NSApplication.shared.activate(ignoringOtherApps: true)
+                    if let index = CommandLine.arguments.firstIndex(of: "--scan"), CommandLine.arguments.count > index + 1 {
+                        store.scan(URL(fileURLWithPath: CommandLine.arguments[index + 1]))
+                    }
+                    #if DEBUG
+                    AppDiagnostics.runIfRequested(store: store)
+                    #endif
+                }
+        }
+        .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 1320, height: 920)
+        .commands {
+            CommandGroup(replacing: .newItem) {
+                Button(L10n.text("action.choose")) { store.chooseFolder() }.keyboardShortcut("o")
+                Button(L10n.text("action.refresh")) { store.refresh() }.keyboardShortcut("r").disabled(store.isScanning)
+            }
+            CommandMenu(L10n.text("menu.navigate")) {
+                Button(L10n.text("action.parent")) { store.goBack() }.keyboardShortcut("[", modifiers: .command)
+                    .disabled(store.navigation.isEmpty)
+                Button(L10n.text("action.reveal")) { if let node = store.selected { store.reveal(node) } }
+                    .keyboardShortcut("f", modifiers: [.command, .shift]).disabled(store.selected == nil || store.isDemo)
+            }
+        }
+    }
+}
