@@ -10,7 +10,8 @@ public enum DemoData {
         func folder(_ name: String, _ entries: [(String, Double)]) -> FileNode {
             let url = base.appendingPathComponent(name)
             let children = entries.map { file($0.0, $0.1, at: url) }.sorted { $0.size > $1.size }
-            return FileNode(url: url, isDirectory: true, size: children.reduce(0) { $0 + $1.size }, children: children)
+            return FileNode(url: url, isDirectory: true, size: children.reduce(0) { $0 + $1.size },
+                            children: children, modified: Date(timeIntervalSince1970: 1_775_000_000))
         }
         let nodes = [
             folder("Movies", [(L10n.text("demo.jeju"), 18.6), ("Studio recording.mp4", 12.4), (L10n.text("demo.summer"), 8.2), ("Archive footage.mp4", 3.6)]),

@@ -3,6 +3,8 @@ import AppleTreeCore
 
 struct FileListPanel: View {
     @EnvironmentObject private var store: AppStore
+    @AppStorage(FileListPreference.showModificationDatesKey)
+    private var showModificationDates = FileListPreference.showModificationDatesByDefault
 
     var body: some View {
         let rows = store.outlineRows
@@ -42,6 +44,9 @@ struct FileListPanel: View {
                 Text(L10n.text("list.size")).frame(width: 87, alignment: .trailing)
                 Text(L10n.text("list.share")).frame(width: 142, alignment: .trailing)
                 Text(L10n.text("list.kind")).frame(width: 68, alignment: .leading)
+                if showModificationDates {
+                    Text(L10n.text("list.modified")).frame(width: 100, alignment: .leading)
+                }
                 Color.clear.frame(width: 51, height: 1)
             }
             .font(.system(size: 10, weight: .medium)).foregroundStyle(Theme.secondary)
@@ -58,7 +63,11 @@ struct FileListPanel: View {
                 LazyVStack(spacing: 0) {
                     ForEach(rows) { row in
                         VStack(spacing: 0) {
-                            if row.hiddenCount > 0 { MoreRow(row: row) } else { FileRow(node: row.node, depth: row.depth) }
+                            if row.hiddenCount > 0 {
+                                MoreRow(row: row)
+                            } else {
+                                FileRow(node: row.node, depth: row.depth, showModificationDate: showModificationDates)
+                            }
                             Rectangle().fill(Theme.line.opacity(0.7)).frame(height: 1).padding(.leading, 20)
                         }
                         .transition(.asymmetric(insertion: .opacity.combined(with: .offset(y: -6)), removal: .opacity))
@@ -241,6 +250,7 @@ private struct FileRow: View {
     @EnvironmentObject private var store: AppStore
     let node: FileNode
     var depth = 0
+    var showModificationDate = true
     @State private var hovering = false
 
     var body: some View {
@@ -294,6 +304,12 @@ private struct FileRow: View {
                     .frame(width: 45, alignment: .trailing)
             }.frame(width: 142, alignment: .trailing)
             Text(node.kind.title).font(.system(size: 10)).foregroundStyle(Theme.secondary).frame(width: 68, alignment: .leading)
+            if showModificationDate {
+                Text(node.modified?.formatted(date: .numeric, time: .omitted) ?? "—")
+                    .font(.system(size: 10)).monospacedDigit().foregroundStyle(Theme.secondary)
+                    .lineLimit(1).frame(width: 100, alignment: .leading)
+                    .help(node.modified?.formatted(date: .complete, time: .standard) ?? L10n.text("list.modifiedUnavailable"))
+            }
             HStack(spacing: 0) {
                 IconButton(symbol: "arrow.up.forward.square", help: L10n.text("action.reveal"), disabled: store.isDemo) { store.reveal(node) }
                 Menu { NodeMenu(node: node) } label: {

@@ -150,6 +150,10 @@
 "settings.language.system" = "Mac 설정 따르기 (%@)";
 "settings.language.note" = "모든 AppleTree 창에 바로 적용돼요.";
 "sidebar.settings" = "설정";
+"settings.dates.show" = "파일 목록에 수정일 표시";
+"settings.dates.note" = "폴더별 보기와 큰 파일 목록에 수정일 열을 표시합니다. 변경 사항은 즉시 적용되며 다음 실행에도 유지됩니다.";
+"list.modified" = "수정일";
+"list.modifiedUnavailable" = "수정일 정보 없음";
 "search.mode.name" = "이름";
 "search.mode.ext" = "확장자";
 "search.mode.regex" = "정규식";

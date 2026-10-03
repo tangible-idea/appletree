@@ -149,6 +149,10 @@
 "settings.language" = "Language";
 "settings.language.system" = "Match Mac (%@)";
 "settings.language.note" = "Applies right away to every AppleTree window.";
+"settings.dates.show" = "Show modification dates in file lists";
+"settings.dates.note" = "Show the Modified column in By folder and Largest files. Changes apply immediately and are remembered next time.";
+"list.modified" = "Modified";
+"list.modifiedUnavailable" = "Modification date unavailable";
 "sidebar.settings" = "Settings";
 "search.mode.name" = "Name";
 "search.mode.ext" = "Extension";

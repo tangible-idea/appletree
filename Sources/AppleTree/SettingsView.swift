@@ -13,9 +13,16 @@ enum LanguagePreference {
     }
 }
 
+enum FileListPreference {
+    static let showModificationDatesKey = "showModificationDates"
+    static let showModificationDatesByDefault = true
+}
+
 struct SettingsView: View {
     @EnvironmentObject private var store: AppStore
     @AppStorage(LanguagePreference.key) private var appLanguage = LanguagePreference.system
+    @AppStorage(FileListPreference.showModificationDatesKey)
+    private var showModificationDates = FileListPreference.showModificationDatesByDefault
 
     private var language: Binding<String> {
         Binding(get: { appLanguage }, set: { code in
@@ -37,6 +44,11 @@ struct SettingsView: View {
             }
             .pickerStyle(.radioGroup)
             Text(L10n.text("settings.language.note"))
+                .font(.system(size: 11)).foregroundStyle(.secondary)
+
+            Divider().padding(.vertical, 10)
+            Toggle(L10n.text("settings.dates.show"), isOn: $showModificationDates)
+            Text(L10n.text("settings.dates.note"))
                 .font(.system(size: 11)).foregroundStyle(.secondary)
         }
         .padding(24)
