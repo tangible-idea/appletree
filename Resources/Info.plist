@@ -16,5 +16,11 @@
     <key>NSHighResolutionCapable</key><true/>
     <key>NSPrincipalClass</key><string>NSApplication</string>
     <key>NSHumanReadableCopyright</key><string>AppleTree</string>
+    <key>NSDesktopFolderUsageDescription</key><string>AppleTree requires access to your Desktop folder to measure disk space.</string>
+    <key>NSDocumentsFolderUsageDescription</key><string>AppleTree requires access to your Documents folder to measure disk space.</string>
+    <key>NSDownloadsFolderUsageDescription</key><string>AppleTree requires access to your Downloads folder to measure disk space.</string>
+    <key>NSRemovableVolumesUsageDescription</key><string>AppleTree requires access to removable volumes to measure disk space.</string>
+    <key>NSNetworkVolumesUsageDescription</key><string>AppleTree requires access to network volumes to measure disk space.</string>
+    <key>NSFullDiskAccessUsageDescription</key><string>AppleTree requires Full Disk Access to scan all files without repeated folder permission prompts.</string>
 </dict>
 </plist>

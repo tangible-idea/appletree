@@ -119,3 +119,38 @@ private func withFixture(_ body: (URL) throws -> Void) throws {
     #expect(FileKind.classify(URL(fileURLWithPath: "/test.MOV")) == .video)
     #expect(FileKind.classify(URL(fileURLWithPath: "/unknown")) == .other)
 }
+
+@Test func scanWithTargetBytesReportsTargetInProgress() throws {
+    final class ProgressBox: @unchecked Sendable {
+        var last: ScanProgress?
+    }
+    try withFixture { folder in
+        try Data(repeating: 1, count: 100).write(to: folder.appendingPathComponent("test.bin"))
+        let box = ProgressBox()
+        let report = try DiskScanner.scan(folder, targetBytes: 500) { progress in
+            box.last = progress
+        }
+        #expect(report.root.size == 100)
+        #expect(box.last?.targetBytes == 500)
+        #expect(box.last?.bytes == 100)
+    }
+}
+
+@Test func fileNodeAndScanReportAreCodable() throws {
+    try withFixture { folder in
+        let sub = folder.appendingPathComponent("sub")
+        try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
+        try Data(repeating: 5, count: 50).write(to: sub.appendingPathComponent("file.txt"))
+
+        let report = try DiskScanner.scan(folder)
+        let encoder = PropertyListEncoder()
+        let data = try encoder.encode(report)
+        let decoder = PropertyListDecoder()
+        let decoded = try decoder.decode(ScanReport.self, from: data)
+
+        #expect(decoded.root.size == report.root.size)
+        #expect(decoded.root.fileCount == report.root.fileCount)
+        #expect(decoded.isCached == true)
+        #expect(decoded.root.findNode(path: sub.path) != nil)
+    }
+}

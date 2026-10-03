@@ -12,14 +12,29 @@ struct MapPanel: View {
     @EnvironmentObject private var store: AppStore
 
     private var items: [MapItem] {
-        let children = store.current.children.filter { $0.size > 0 }
-        var result = children.prefix(18).enumerated().map { MapItem(node: $0.element, index: $0.offset) }
-        if children.count > 18 {
-            let rest = Array(children.dropFirst(18))
-            let group = FileNode(url: store.current.url.appendingPathComponent(".appletree-visual-group"),
-                                 name: L10n.count(.otherItems, rest.count), isDirectory: true,
-                                 size: rest.reduce(0) { $0 + $1.size }, children: rest)
-            result.append(MapItem(node: group, index: 18, grouped: true))
+        let allChildren = store.current.children
+        guard !allChildren.isEmpty else { return [] }
+
+        var result: [MapItem] = []
+        var top18Size: Int64 = 0
+        var topCount = 0
+
+        for (idx, child) in allChildren.prefix(18).enumerated() {
+            guard child.size > 0 else { break }
+            result.append(MapItem(node: child, index: idx))
+            top18Size += child.size
+            topCount += 1
+        }
+
+        if allChildren.count > topCount {
+            let restCount = allChildren.count - topCount
+            let restSize = max(0, store.current.size - top18Size)
+            if restSize > 0 {
+                let group = FileNode(url: store.current.url.appendingPathComponent(".appletree-visual-group"),
+                                     name: L10n.count(.otherItems, restCount), isDirectory: true,
+                                     size: restSize, fileCount: restCount)
+                result.append(MapItem(node: group, index: topCount, grouped: true))
+            }
         }
         return result
     }

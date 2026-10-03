@@ -37,7 +37,7 @@ struct Sidebar: View {
             SmallLabel(text: L10n.text("sidebar.shortcuts")).padding(.horizontal, 27).padding(.top, 33).padding(.bottom, 12)
             ForEach(shortcuts, id: \.2) { symbol, title, path in
                 Button {
-                    store.scan(FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(path))
+                    store.requestScan(FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(path))
                 } label: {
                     HStack(spacing: 12) {
                         Image(systemName: symbol).font(.system(size: 15)).frame(width: 19)
@@ -57,6 +57,25 @@ struct Sidebar: View {
             }.buttonStyle(.plain)
 
             Spacer(minLength: 35)
+
+            if !FullDiskAccess.isGranted {
+                Button {
+                    store.showFDAPrompt = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.shield.fill")
+                            .foregroundStyle(Theme.accent)
+                        Text(L10n.text("fda.badge"))
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(Theme.accent)
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 10).padding(.vertical, 7)
+                    .background(Theme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 18).padding(.bottom, 10)
+            }
             VStack(alignment: .leading, spacing: 13) {
                 HStack(spacing: 8) {
                     Image(systemName: "internaldrive").font(.system(size: 17)).foregroundStyle(Theme.secondary)

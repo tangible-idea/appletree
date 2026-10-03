@@ -49,12 +49,13 @@ public final class FileNode: Identifiable, Sendable {
     public let isDirectory: Bool
     public let size: Int64
     public let fileCount: Int
+    public let directoryCount: Int
     public let children: [FileNode]
     public let modified: Date?
     public var kind: FileKind { isDirectory ? .folder : FileKind.classify(url) }
 
     public init(url: URL, name: String? = nil, isDirectory: Bool, size: Int64,
-                fileCount: Int? = nil, children: [FileNode] = [], modified: Date? = nil) {
+                fileCount: Int? = nil, directoryCount: Int? = nil, children: [FileNode] = [], modified: Date? = nil) {
         self.url = url
         self.name = name ?? url.lastPathComponent
         self.isDirectory = isDirectory
@@ -62,6 +63,7 @@ public final class FileNode: Identifiable, Sendable {
         self.children = children
         self.modified = modified
         self.fileCount = fileCount ?? (isDirectory ? children.reduce(0) { $0 + $1.fileCount } : 1)
+        self.directoryCount = directoryCount ?? (isDirectory ? children.filter { $0.isDirectory }.count : 0)
     }
 
     public func allFiles() -> [FileNode] {
@@ -72,6 +74,51 @@ public final class FileNode: Identifiable, Sendable {
             else { result.append(node) }
         }
         return result
+    }
+
+    public func findNode(path: String) -> FileNode? {
+        if self.url.path == path { return self }
+        guard self.isDirectory else { return nil }
+        for child in children {
+            if path == child.url.path { return child }
+            if path.hasPrefix(child.url.path.hasSuffix("/") ? child.url.path : child.url.path + "/") {
+                if let found = child.findNode(path: path) { return found }
+            }
+        }
+        return nil
+    }
+}
+
+extension FileNode: Codable {
+    enum CodingKeys: String, CodingKey {
+        case url, name, isDirectory, size, fileCount, directoryCount, children, modified
+    }
+
+    public convenience init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let url = try container.decode(URL.self, forKey: .url)
+        let name = try container.decode(String.self, forKey: .name)
+        let isDirectory = try container.decode(Bool.self, forKey: .isDirectory)
+        let size = try container.decode(Int64.self, forKey: .size)
+        let fileCount = try container.decode(Int.self, forKey: .fileCount)
+        let directoryCount = try container.decodeIfPresent(Int.self, forKey: .directoryCount)
+        let children = try container.decode([FileNode].self, forKey: .children)
+        let modified = try container.decodeIfPresent(Date.self, forKey: .modified)
+        self.init(url: url, name: name, isDirectory: isDirectory, size: size,
+                  fileCount: fileCount, directoryCount: directoryCount,
+                  children: children, modified: modified)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(url, forKey: .url)
+        try container.encode(name, forKey: .name)
+        try container.encode(isDirectory, forKey: .isDirectory)
+        try container.encode(size, forKey: .size)
+        try container.encode(fileCount, forKey: .fileCount)
+        try container.encode(directoryCount, forKey: .directoryCount)
+        try container.encode(children, forKey: .children)
+        try container.encodeIfPresent(modified, forKey: .modified)
     }
 }
 

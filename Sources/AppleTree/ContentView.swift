@@ -32,6 +32,9 @@ struct ContentView: View {
             Button(L10n.text("action.trash"), role: .destructive) { store.moveToTrash() }
             Button(L10n.text("action.cancel"), role: .cancel) { store.trashCandidate = nil }
         } message: { Text(L10n.text("trash.message")) }
+        .sheet(isPresented: $store.showFDAPrompt) {
+            FDAPromptView()
+        }
     }
 
     private var toolbar: some View {
@@ -93,7 +96,7 @@ struct ContentView: View {
             MetricCard(title: L10n.text("metric.size"), value: SizeText.format(store.current.size),
                        detail: store.isDemo ? L10n.text("preview.data") : L10n.text("metric.sum"), symbol: "chart.pie", accent: true)
             MetricCard(title: L10n.text("metric.files"), value: store.current.fileCount.formatted(),
-                       detail: L10n.count(.subfolders, store.current.children.filter { $0.isDirectory }.count), symbol: "doc.on.doc")
+                       detail: L10n.count(.subfolders, store.current.directoryCount), symbol: "doc.on.doc")
             MetricCard(title: L10n.text("metric.largest"), value: store.largestFolder?.name ?? "—",
                        detail: store.largestFolder.map { L10n.format("metric.share", SizeText.format($0.size), percentage($0.size, store.current.size)) } ?? L10n.text("metric.noFolders"),
                        symbol: "folder", compact: true)
@@ -101,16 +104,57 @@ struct ContentView: View {
     }
 
     private var scanningBanner: some View {
-        HStack(spacing: 14) {
-            ProgressView().controlSize(.small)
-            VStack(alignment: .leading, spacing: 5) {
-                Text(L10n.text("scan.running")).font(.system(size: 12, weight: .semibold))
-                Text(store.progress.map { L10n.format("scan.progress", L10n.count(.files, $0.files), SizeText.format($0.bytes), $0.path) } ?? L10n.text("scan.reading"))
-                    .font(.system(size: 10)).foregroundStyle(Theme.secondary).lineLimit(1).truncationMode(.middle)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                ProgressView().controlSize(.small)
+                Text(L10n.text("scan.running")).font(.system(size: 13, weight: .semibold))
+                Spacer()
+                if let progress = store.progress, let target = progress.targetBytes, target > 0 {
+                    Text(L10n.format("scan.progressRatio", SizeText.format(progress.bytes), SizeText.format(target), percentage(progress.bytes, target)))
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Theme.accent)
+                } else if let progress = store.progress {
+                    Text(SizeText.format(progress.bytes))
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Theme.accent)
+                }
+                Button(L10n.text("action.cancel")) { store.cancelScan() }
+                    .buttonStyle(QuietButtonStyle()).font(.system(size: 11))
             }
-            Spacer()
-            Button(L10n.text("action.cancel")) { store.cancelScan() }.buttonStyle(QuietButtonStyle()).font(.system(size: 11))
-        }.padding(15).background(.white, in: RoundedRectangle(cornerRadius: 10))
+
+            GeometryReader { proxy in
+                let target = store.progress?.targetBytes ?? 0
+                let fraction = target > 0 ? min(1.0, max(0.0, Double(store.progress?.bytes ?? 0) / Double(target))) : 0.0
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Theme.line)
+                    if fraction > 0 {
+                        Capsule().fill(Theme.accent)
+                            .frame(width: max(8, proxy.size.width * fraction))
+                    }
+                }
+            }
+            .frame(height: 6)
+
+            if let progress = store.progress {
+                HStack(spacing: 8) {
+                    Text(L10n.count(.files, progress.files))
+                        .font(.system(size: 10, weight: .medium))
+                    Text("·").foregroundStyle(Theme.secondary)
+                    Text(progress.path)
+                        .font(.system(size: 10))
+                        .foregroundStyle(Theme.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            } else {
+                Text(L10n.text("scan.reading"))
+                    .font(.system(size: 10))
+                    .foregroundStyle(Theme.secondary)
+            }
+        }
+        .padding(16)
+        .background(.white, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line, lineWidth: 1))
     }
 
     private func noticeBanner(_ text: String) -> some View {

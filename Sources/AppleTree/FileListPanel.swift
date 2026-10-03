@@ -94,13 +94,15 @@ private struct FileRow: View {
             Text(SizeText.format(node.size)).font(.system(size: 12, weight: .medium, design: .rounded))
                 .monospacedDigit().frame(width: 87, alignment: .trailing)
             HStack(spacing: 9) {
-                GeometryReader { proxy in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(Theme.sidebar)
+                let fraction = store.current.size > 0 ? min(1.0, max(0.0, Double(node.size) / Double(store.current.size))) : 0.0
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Theme.sidebar).frame(width: 77, height: 4)
+                    if fraction > 0 {
                         Capsule().fill(Theme.kindColor(node.kind).opacity(0.7))
-                            .frame(width: proxy.size.width * (store.current.size > 0 ? min(1, Double(node.size) / Double(store.current.size)) : 0))
+                            .frame(width: max(2, 77 * fraction), height: 4)
                     }
-                }.frame(width: 77, height: 4)
+                }
+                .frame(width: 77, height: 4)
                 Text("\(percentage(node.size, store.current.size))%")
                     .font(.system(size: 10, design: .rounded)).foregroundStyle(Theme.secondary)
                     .frame(width: 45, alignment: .trailing)

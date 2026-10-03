@@ -22,6 +22,7 @@
 "error.open" = "No app can open this file, or the file has moved.";
 "error.notDirectory" = "Please choose a folder to scan.";
 "notice.cancelled" = "Scan cancelled. Your previous results are still available.";
+"notice.cached" = "Loaded saved index for “%@”. Rescan (⌘R) to check for recent changes.";
 "trash.message" = "You can restore this item from the Trash in Finder. The folder will be rescanned afterward.";
 "preview.badge" = "Preview";
 "preview.caption" = "Exploring sample data";
@@ -91,6 +92,7 @@
 "heading.folder" = "Explore files and folders in %@, largest first.";
 "metric.share" = "%@ · %@%% of total";
 "scan.progress" = "%@ · %@ · %@";
+"scan.progressRatio" = "%@ / %@ (%@%%)";
 "footer.elapsed" = "Scanned in %@s  ·  ";
 "sidebar.scan" = "Scan %@";
 "sidebar.total" = "%@ total";
@@ -105,3 +107,12 @@
 "count.subfolders.other" = "%@ subfolders";
 "count.otherItems.one" = "%@ other item";
 "count.otherItems.other" = "%@ other items";
+"fda.title" = "Full Disk Access";
+"fda.message" = "Granting Full Disk Access allows AppleTree to scan your entire drive smoothly without repeated permission prompts for each folder (Desktop, Documents, Downloads).";
+"fda.openSettings" = "Open System Settings";
+"fda.revealApp" = "Show App in Finder";
+"fda.continueWithout" = "Continue Without Permission";
+"fda.badge" = "Full Disk Access Recommended";
+"fda.step1" = "Click ‘Open System Settings’ below to open Privacy & Security settings.";
+"fda.step2" = "Enable AppleTree in the ‘Full Disk Access’ list.";
+"fda.step3" = "If not listed, click ‘Show App in Finder’ and drag the app into the list.";

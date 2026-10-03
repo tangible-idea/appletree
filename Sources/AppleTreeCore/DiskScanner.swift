@@ -3,16 +3,66 @@ import Foundation
 public struct ScanProgress: Sendable {
     public let files: Int
     public let bytes: Int64
+    public let targetBytes: Int64?
     public let path: String
+
+    public init(files: Int, bytes: Int64, targetBytes: Int64? = nil, path: String) {
+        self.files = files
+        self.bytes = bytes
+        self.targetBytes = targetBytes
+        self.path = path
+    }
 }
 
-public struct ScanReport: Sendable {
+public struct ScanReport: Sendable, Codable {
     public let root: FileNode
     public let filesBySize: [FileNode]
     public let unreadableCount: Int
     public let unreadablePaths: [String]
     public let skippedLinks: Int
     public let elapsed: TimeInterval
+    public let scannedAt: Date
+    public let isCached: Bool
+
+    public init(root: FileNode, filesBySize: [FileNode]? = nil, unreadableCount: Int = 0,
+                unreadablePaths: [String] = [], skippedLinks: Int = 0,
+                elapsed: TimeInterval = 0, scannedAt: Date = Date(), isCached: Bool = false) {
+        self.root = root
+        self.filesBySize = filesBySize ?? root.allFiles().sorted { $0.size == $1.size ? $0.id < $1.id : $0.size > $1.size }
+        self.unreadableCount = unreadableCount
+        self.unreadablePaths = unreadablePaths
+        self.skippedLinks = skippedLinks
+        self.elapsed = elapsed
+        self.scannedAt = scannedAt
+        self.isCached = isCached
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case root, unreadableCount, unreadablePaths, skippedLinks, elapsed, scannedAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let root = try container.decode(FileNode.self, forKey: .root)
+        let unreadableCount = try container.decode(Int.self, forKey: .unreadableCount)
+        let unreadablePaths = try container.decode([String].self, forKey: .unreadablePaths)
+        let skippedLinks = try container.decode(Int.self, forKey: .skippedLinks)
+        let elapsed = try container.decode(TimeInterval.self, forKey: .elapsed)
+        let scannedAt = try container.decodeIfPresent(Date.self, forKey: .scannedAt) ?? Date()
+        self.init(root: root, filesBySize: nil, unreadableCount: unreadableCount,
+                  unreadablePaths: unreadablePaths, skippedLinks: skippedLinks,
+                  elapsed: elapsed, scannedAt: scannedAt, isCached: true)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(root, forKey: .root)
+        try container.encode(unreadableCount, forKey: .unreadableCount)
+        try container.encode(unreadablePaths, forKey: .unreadablePaths)
+        try container.encode(skippedLinks, forKey: .skippedLinks)
+        try container.encode(elapsed, forKey: .elapsed)
+        try container.encode(scannedAt, forKey: .scannedAt)
+    }
 }
 
 public enum ScanFailure: LocalizedError {
@@ -22,7 +72,7 @@ public enum ScanFailure: LocalizedError {
 
 /// Reads metadata only. Symbolic links are never followed and file contents are never read.
 public enum DiskScanner {
-    public static func scan(_ url: URL, progress: @Sendable (ScanProgress) -> Void = { _ in }) throws -> ScanReport {
+    public static func scan(_ url: URL, targetBytes: Int64? = nil, progress: @Sendable (ScanProgress) -> Void = { _ in }) throws -> ScanReport {
         let start = Date()
         let manager = FileManager.default
         let keys: Set<URLResourceKey> = [.isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey,
@@ -74,7 +124,7 @@ public enum DiskScanner {
             files += 1
             bytes += size
             if Date().timeIntervalSince(lastUpdate) >= 0.12 {
-                progress(ScanProgress(files: files, bytes: bytes, path: current.path))
+                progress(ScanProgress(files: files, bytes: bytes, targetBytes: targetBytes, path: current.path))
                 lastUpdate = Date()
             }
             return FileNode(url: current, isDirectory: false, size: size, modified: values.contentModificationDate)
@@ -83,9 +133,9 @@ public enum DiskScanner {
         let root = try visit(url.standardizedFileURL.resolvingSymlinksInPath(), values: rootValues, isRoot: true)
         try Task.checkCancellation()
         let allFiles = root.allFiles().sorted { $0.size == $1.size ? $0.id < $1.id : $0.size > $1.size }
-        progress(ScanProgress(files: files, bytes: bytes, path: url.path))
+        progress(ScanProgress(files: files, bytes: bytes, targetBytes: targetBytes, path: url.path))
         return ScanReport(root: root, filesBySize: allFiles, unreadableCount: unreadableCount,
                           unreadablePaths: unreadablePaths, skippedLinks: skippedLinks,
-                          elapsed: Date().timeIntervalSince(start))
+                          elapsed: Date().timeIntervalSince(start), scannedAt: Date(), isCached: false)
     }
 }

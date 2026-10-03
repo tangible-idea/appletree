@@ -17,38 +17,85 @@ final class AppStore: ObservableObject {
     @Published var isScanning = false
     @Published var progress: ScanProgress?
     @Published var report: ScanReport?
-    @Published var query = ""
-    @Published var mode: BrowserMode = .folders
+    @Published var query = "" {
+        didSet {
+            if !query.isEmpty && scopedFiles.isEmpty && current.id != root.id {
+                updateScopedFiles()
+            }
+        }
+    }
+    @Published var mode: BrowserMode = .folders {
+        didSet {
+            if mode == .largest {
+                updateScopedFiles()
+            }
+        }
+    }
     @Published var showMap = true
     @Published var errorMessage: String?
     @Published var trashCandidate: FileNode?
     @Published var notice: String?
     @Published var diskTotal: Int64 = 0
     @Published var diskFree: Int64 = 0
+    @Published var showFDAPrompt = false
     @Published private var scopedFiles: [FileNode] = []
     private var allFiles: [FileNode] = []
     private var scanTask: Task<ScanReport, Error>?
     private var scanID = UUID()
     private var observationTask: Task<Void, Never>?
+    private var pendingScanURL: URL?
+    private var hasPromptedFDA = false
 
     var current: FileNode { navigation.last ?? root }
     var breadcrumbs: [FileNode] { [root] + navigation }
     var visibleItems: [FileNode] {
-        let items = mode == .largest || !query.isEmpty ? scopedFiles : current.children
-        guard !query.isEmpty else { return Array(items.prefix(200)) }
-        return Array(items.lazy.filter { $0.name.localizedCaseInsensitiveContains(self.query) }.prefix(200))
+        if query.isEmpty {
+            let items = mode == .largest ? scopedFiles : current.children
+            return Array(items.prefix(200))
+        }
+        let pool = mode == .largest || current.id != root.id ? (scopedFiles.isEmpty ? current.children : scopedFiles) : allFiles
+        let needle = query.lowercased()
+        var matches: [FileNode] = []
+        for node in pool {
+            if node.name.localizedCaseInsensitiveContains(needle) {
+                matches.append(node)
+                if matches.count >= 200 { break }
+            }
+        }
+        return matches
     }
     var matchingCount: Int {
-        let items = mode == .largest || !query.isEmpty ? scopedFiles : current.children
-        return query.isEmpty ? items.count : items.filter { $0.name.localizedCaseInsensitiveContains(query) }.count
+        if query.isEmpty {
+            return mode == .largest ? scopedFiles.count : current.children.count
+        }
+        let pool = mode == .largest || current.id != root.id ? (scopedFiles.isEmpty ? current.children : scopedFiles) : allFiles
+        let needle = query.lowercased()
+        var count = 0
+        for node in pool {
+            if node.name.localizedCaseInsensitiveContains(needle) {
+                count += 1
+                if count >= 201 { break }
+            }
+        }
+        return count
     }
     var largestFolder: FileNode? { current.children.first { $0.isDirectory } }
     var diskUsedFraction: Double { diskTotal > 0 ? Double(diskTotal - diskFree) / Double(diskTotal) : 0 }
 
     init() {
+        let args = CommandLine.arguments
+        let isTesting = args.contains("--smoke-test") || args.contains("--snapshot")
         allFiles = root.allFiles().sorted { $0.size > $1.size }
         scopedFiles = allFiles
         updateDisk(URL(fileURLWithPath: NSHomeDirectory()))
+
+        if !isTesting, let recent = ScanIndexCache.shared.loadMostRecent() {
+            var isDir: ObjCBool = false
+            if FileManager.default.fileExists(atPath: recent.root.url.path, isDirectory: &isDir), isDir.boolValue {
+                applyScanResult(recent, url: recent.root.url)
+                notice = L10n.format("notice.cached", recent.root.name)
+            }
+        }
     }
 
     func chooseFolder() {
@@ -61,17 +108,63 @@ final class AppStore: ObservableObject {
         panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
-            Task { @MainActor in self?.scan(url) }
+            Task { @MainActor in self?.requestScan(url) }
         }
     }
 
-    func scan(_ url: URL) {
+    func requestScan(_ url: URL, force: Bool = false) {
+        let args = CommandLine.arguments
+        let isTesting = args.contains("--smoke-test") || args.contains("--snapshot")
+        let path = url.standardizedFileURL.path
+        let isBroadScope = path == "/" || path == NSHomeDirectory() || path.hasPrefix("/Volumes")
+        if !isTesting && isBroadScope && !FullDiskAccess.isGranted && !hasPromptedFDA {
+            pendingScanURL = url
+            showFDAPrompt = true
+            hasPromptedFDA = true
+            return
+        }
+        scan(url, force: force)
+    }
+
+    func confirmFDAScan() {
+        showFDAPrompt = false
+        if let url = pendingScanURL {
+            pendingScanURL = nil
+            scan(url)
+        }
+    }
+
+    func scan(_ url: URL, force: Bool = false) {
+        if !force {
+            if let cached = ScanIndexCache.shared.findNodeInCachedTrees(for: url) {
+                if cached.report.root.url.path == url.standardizedFileURL.path {
+                    applyScanResult(cached.report, url: url)
+                    notice = L10n.format("notice.cached", cached.report.root.name)
+                    return
+                } else if !isDemo && root.url.path == cached.report.root.url.path {
+                    navigate(to: cached.node)
+                    return
+                }
+            }
+        }
+
         scanTask?.cancel()
         let id = UUID()
         scanID = id
         isScanning = true
         progress = nil
         notice = nil
+
+        var targetBytes: Int64?
+        if let cached = ScanIndexCache.shared.get(for: url) {
+            targetBytes = cached.root.size
+        } else if let attrs = try? FileManager.default.attributesOfFileSystem(forPath: url.path),
+                  let total = (attrs[.systemSize] as? NSNumber)?.int64Value,
+                  let free = (attrs[.systemFreeSize] as? NSNumber)?.int64Value,
+                  total > free {
+            targetBytes = total - free
+        }
+
         let scoped = url.startAccessingSecurityScopedResource()
         let onProgress: @Sendable (ScanProgress) -> Void = { [weak self] update in
             guard let self else { return }
@@ -81,7 +174,7 @@ final class AppStore: ObservableObject {
             }
         }
         let task = Task.detached(priority: .userInitiated) {
-            try DiskScanner.scan(url, progress: onProgress)
+            try DiskScanner.scan(url, targetBytes: targetBytes, progress: onProgress)
         }
         scanTask = task
         observationTask = Task { [weak self] in
@@ -89,16 +182,8 @@ final class AppStore: ObservableObject {
             do {
                 let result = try await task.value
                 guard let self, self.scanID == id else { return }
-                self.root = result.root
-                self.report = result
-                self.navigation = []
-                self.selected = nil
-                self.query = ""
-                self.allFiles = result.filesBySize
-                self.scopedFiles = result.filesBySize
-                self.isDemo = false
-                self.isScanning = false
-                self.updateDisk(url)
+                ScanIndexCache.shared.set(result, for: url)
+                self.applyScanResult(result, url: url)
                 if result.unreadableCount > 0 {
                     self.notice = L10n.format("notice.unreadable", result.unreadableCount.formatted())
                 } else if result.skippedLinks > 0 {
@@ -115,6 +200,19 @@ final class AppStore: ObservableObject {
         }
     }
 
+    private func applyScanResult(_ result: ScanReport, url: URL) {
+        root = result.root
+        report = result
+        navigation = []
+        selected = nil
+        query = ""
+        allFiles = result.filesBySize
+        scopedFiles = result.filesBySize
+        isDemo = false
+        isScanning = false
+        updateDisk(url)
+    }
+
     func cancelScan() {
         scanID = UUID()
         scanTask?.cancel()
@@ -125,19 +223,27 @@ final class AppStore: ObservableObject {
 
     func refresh() {
         guard !isDemo else { chooseFolder(); return }
-        scan(root.url)
+        scan(root.url, force: true)
     }
 
     func enter(_ node: FileNode) {
         guard node.isDirectory else { selected = node; return }
         navigation.append(node)
-        resetScope()
+        selected = nil
+        query = ""
+        if mode == .largest {
+            updateScopedFiles()
+        }
     }
 
     func goBack() {
         guard !navigation.isEmpty else { return }
         navigation.removeLast()
-        resetScope()
+        selected = nil
+        query = ""
+        if mode == .largest {
+            updateScopedFiles()
+        }
     }
 
     func navigate(to node: FileNode) {
@@ -145,14 +251,19 @@ final class AppStore: ObservableObject {
         else if let index = navigation.firstIndex(where: { $0.id == node.id }) {
             navigation = Array(navigation.prefix(index + 1))
         }
-        resetScope()
-    }
-
-    private func resetScope() {
         selected = nil
         query = ""
-        let prefix = current.url.path.hasSuffix("/") ? current.url.path : current.url.path + "/"
-        scopedFiles = allFiles.filter { $0.id.hasPrefix(prefix) }
+        if mode == .largest {
+            updateScopedFiles()
+        }
+    }
+
+    private func updateScopedFiles() {
+        if current.id == root.id {
+            scopedFiles = allFiles
+        } else {
+            scopedFiles = current.allFiles().sorted { $0.size == $1.size ? $0.id < $1.id : $0.size > $1.size }
+        }
     }
 
     func reveal(_ node: FileNode) {
@@ -177,7 +288,7 @@ final class AppStore: ObservableObject {
         trashCandidate = nil
         do {
             try FileManager.default.trashItem(at: node.url, resultingItemURL: nil)
-            scan(root.url)
+            scan(root.url, force: true)
         } catch {
             errorMessage = L10n.format("error.trash", error.localizedDescription)
         }
