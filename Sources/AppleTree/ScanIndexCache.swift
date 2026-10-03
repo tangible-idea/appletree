@@ -58,14 +58,8 @@ final class ScanIndexCache {
               let decoded = try? PropertyListDecoder().decode([String: ManifestEntry].self, from: data) else {
             return
         }
-        // Earlier builds stored keyed property lists that took a minute to load for a
-        // home folder. They cannot be read cheaply, so drop them and rescan instead.
-        let legacy = decoded.values.filter { !$0.fileName.hasSuffix(".\(Self.fileExtension)") }
-        for entry in legacy {
-            try? FileManager.default.removeItem(at: cacheDirectory.appendingPathComponent(entry.fileName))
-        }
-        manifest = decoded.filter { $0.value.fileName.hasSuffix(".\(Self.fileExtension)") }
-        if !legacy.isEmpty { saveManifest() }
+        // Entries from earlier builds still point at property lists; `get` converts them on first load.
+        manifest = decoded
     }
 
     private func saveManifest() {
@@ -87,16 +81,33 @@ final class ScanIndexCache {
         let pathKey = key(for: canonicalPath(for: url))
         if let memory = memoryCache[pathKey] { return memory }
         if let pending = loading[pathKey] { return await pending.value }
-        guard manifest[pathKey] != nil else { return nil }
-        let file = fileURL(for: pathKey)
+        guard let entry = manifest[pathKey] else { return nil }
+        let file = cacheDirectory.appendingPathComponent(entry.fileName)
+        let isLegacy = !entry.fileName.hasSuffix(".\(Self.fileExtension)")
+        let converted = cacheDirectory.appendingPathComponent(deterministicFileName(for: pathKey))
         let task = Task.detached(priority: .userInitiated) { () -> ScanReport? in
             guard let data = try? Data(contentsOf: file, options: .mappedIfSafe) else { return nil }
-            return try? ScanArchive.decode(data)
+            guard isLegacy else { return try? ScanArchive.decode(data) }
+            // Earlier builds wrote keyed property lists: slow to read, but a whole disk's
+            // index is too costly to throw away. Convert once, and remove the original
+            // only after the compact copy is safely on disk.
+            guard let report = try? PropertyListDecoder().decode(ScanReport.self, from: data) else { return nil }
+            if (try? ScanArchive.encode(report).write(to: converted, options: .atomic)) != nil {
+                try? FileManager.default.removeItem(at: file)
+            }
+            return report
         }
         loading[pathKey] = task
         let report = await task.value
         loading[pathKey] = nil
-        if let report { memoryCache[pathKey] = report }
+        if let report {
+            memoryCache[pathKey] = report
+            if isLegacy && FileManager.default.fileExists(atPath: converted.path) {
+                manifest[pathKey] = ManifestEntry(path: entry.path, fileName: converted.lastPathComponent,
+                                                  size: entry.size, scannedAt: entry.scannedAt)
+                saveManifest()
+            }
+        }
         return report
     }
 
