@@ -9,10 +9,16 @@ enum Theme {
     static let line = Color(hex: 0xE8E8E1)
     static let accent = Color(hex: 0xD86B3C)
     static let green = Color(hex: 0x60816B)
-    static let tileColors: [Color] = [
-        Color(hex: 0xD8754F), Color(hex: 0xEAB970), Color(hex: 0x929F87),
-        Color(hex: 0xA59BB6), Color(hex: 0x88A5AD), Color(hex: 0xC1AA89), Color(hex: 0xADAE9F)
-    ]
+    static let tileHexes: [UInt32] = [0xD8754F, 0xEAB970, 0x929F87, 0xA59BB6, 0x88A5AD, 0xC1AA89, 0xADAE9F]
+    static let tileColors: [Color] = tileHexes.map { Color(hex: $0) }
+    /// Mixes a palette colour toward white; 0 keeps it, 1 is white.
+    static func blend(_ hex: UInt32, white amount: Double) -> Color {
+        func channel(_ shift: UInt32) -> Double {
+            let value = Double((hex >> shift) & 255) / 255
+            return value + (1 - value) * amount
+        }
+        return Color(.sRGB, red: channel(16), green: channel(8), blue: channel(0), opacity: 1)
+    }
     static func color(_ index: Int) -> Color { tileColors[index % tileColors.count] }
     static func kindColor(_ kind: FileKind) -> Color {
         switch kind {
@@ -23,6 +29,15 @@ enum Theme {
         case .archive: Color(hex: 0xCBA264)
         case .document: Color(hex: 0x88A5AD)
         case .code: Color(hex: 0xA59BB6)
+        case .certificate: Color(hex: 0xC4574E)
+        case .installer: Color(hex: 0xB98A57)
+        case .model: Color(hex: 0x7D8FC0)
+        case .database: Color(hex: 0x6F9A94)
+        case .design: Color(hex: 0xC27A9E)
+        case .font: Color(hex: 0x8C8577)
+        case .ebook: Color(hex: 0x9A8466)
+        case .virtualMachine: Color(hex: 0x6E8299)
+        case .log: Color(hex: 0x9C9C8E)
         case .other: secondary
         }
     }

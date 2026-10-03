@@ -56,12 +56,25 @@ enum AppDiagnostics {
         store.enter(store.root.children[0])
         try require(store.current.name == "Nested" && store.visibleItems.count == 1, "Folder navigation failed")
         store.mode = .largest
+        await store.waitForSearch()
         try require(store.visibleItems.first?.name == "movie.mp4", "Scoped files failed")
         store.goBack()
+        await store.waitForSearch()
         store.query = "NOTE"
+        await store.waitForSearch()
         try require(store.visibleItems.first?.name == "note.txt" && store.matchingCount == 1, "Search failed")
         store.query = ""
+        await store.waitForSearch()
         try require(store.visibleItems.map(\.size) == [200, 50], "Largest files order failed")
+        store.mode = .folders
+        store.kindFilter = [.video]
+        await store.waitForSearch()
+        try require(store.visibleItems.map(\.name) == ["movie.mp4"], "Kind filter failed")
+        store.clearFilters()
+        store.toggleExpanded(store.root.children[0])
+        try require(store.outlineRows.map(\.node.name) == ["Nested", "movie.mp4", "note.txt"], "Outline expansion failed")
+        try require(!store.sunburstArcs.isEmpty, "Ring chart layout failed")
+        store.mode = .largest
         store.refresh()
         try await waitForScan(store)
         try require(store.root.size == 250, "Refresh failed")

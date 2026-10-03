@@ -154,3 +154,109 @@ private func withFixture(_ body: (URL) throws -> Void) throws {
         #expect(decoded.root.findNode(path: sub.path) != nil)
     }
 }
+
+private func indexFixture() -> FileNode {
+    let base = URL(fileURLWithPath: "/Fixture")
+    let old = Date(timeIntervalSinceNow: -400 * 86_400)
+    func file(_ path: String, _ size: Int64, _ modified: Date = Date()) -> FileNode {
+        FileNode(url: base.appendingPathComponent(path), isDirectory: false, size: size, modified: modified)
+    }
+    func folder(_ path: String, _ children: [FileNode]) -> FileNode {
+        let sorted = children.sorted { $0.size > $1.size }
+        return FileNode(url: base.appendingPathComponent(path), isDirectory: true,
+                        size: sorted.reduce(0) { $0 + $1.size }, children: sorted)
+    }
+    let project = folder("Project", [
+        file("Project/package.json", 10),
+        folder("Project/node_modules", [folder("Project/node_modules/left-pad/node_modules", [file("Project/node_modules/left-pad/node_modules/x.js", 5)]),
+                                        file("Project/node_modules/a.js", 300)]),
+        file("Project/release.jks", 4_000)
+    ])
+    let downloads = folder("Downloads", [
+        file("Downloads/setup.dmg", 2_000_000_000, old),
+        file("Downloads/스크린샷 2026-01-01.png".decomposedStringWithCanonicalMapping, 2_000_000),
+        folder("Downloads/Empty", [])
+    ])
+    let copies = folder("Copies", [file("Copies/setup.dmg", 2_000_000_000), file("Copies/.env", 20)])
+    let children = [project, downloads, copies].sorted { $0.size > $1.size }
+    return FileNode(url: base, isDirectory: true, size: children.reduce(0) { $0 + $1.size }, children: children)
+}
+
+@Test func classifiesCertificatesByExtensionAndName() {
+    #expect(FileKind.classify(name: "release.JKS") == .certificate)
+    #expect(FileKind.classify(name: "AuthKey_ABC.p8") == .certificate)
+    #expect(FileKind.classify(name: "id_ed25519") == .certificate)
+    #expect(FileKind.classify(name: ".env.production") == .certificate)
+    #expect(FileKind.classify(name: "model.gguf") == .model)
+    #expect(FileKind.classify(name: "Xcode.xip") == .installer)
+    #expect(FileKind.classify(name: ".gitignore") == .other)
+}
+
+@Test func searchIndexMatchesDecomposedKoreanNamesAndFolders() {
+    let index = SearchIndex(root: indexFixture())
+    #expect(index.search(SearchQuery(text: "스크린샷")).items.map(\.name).count == 1)
+    #expect(index.search(SearchQuery(text: "NODE_mod")).items.map(\.name) == ["node_modules", "node_modules"])
+    let result = index.search(SearchQuery(text: "setup"))
+    #expect(result.totalCount == 2)
+    #expect(result.totalSize == 4_000_000_000)
+}
+
+@Test func searchIndexFiltersByKindPresetAndScope() {
+    let root = indexFixture()
+    let index = SearchIndex(root: root)
+    #expect(Set(index.search(SearchQuery(kinds: [.certificate])).items.map(\.name)) == ["release.jks", ".env"])
+    #expect(index.search(SearchQuery(preset: .huge)).totalCount == 2)
+    #expect(index.search(SearchQuery(preset: .stale)).items.map(\.name) == ["setup.dmg"])
+    #expect(index.search(SearchQuery(preset: .oldDownloads)).totalCount == 1)
+    #expect(index.search(SearchQuery(preset: .screenshots)).totalCount == 1)
+    #expect(index.search(SearchQuery(preset: .duplicates)).totalCount == 2)
+    // Nested caches are covered by their outermost folder.
+    #expect(index.search(SearchQuery(preset: .devCaches)).items.map(\.name) == ["node_modules"])
+    #expect(index.search(SearchQuery(preset: .emptyFolders)).items.map(\.name) == ["Empty"])
+    let project = root.children.first { $0.name == "Project" }!
+    let scoped = index.search(SearchQuery(), in: project)
+    #expect(scoped.items.map(\.name) == ["release.jks", "a.js", "package.json", "x.js"])
+}
+
+@Test func searchIndexLimitsItemsButCountsEverything() {
+    let base = URL(fileURLWithPath: "/Many")
+    let files = (0..<30_000).map { FileNode(url: base.appendingPathComponent("file\($0).txt"), isDirectory: false, size: Int64($0)) }
+    let root = FileNode(url: base, isDirectory: true, size: files.reduce(0) { $0 + $1.size }, children: files.reversed())
+    let result = SearchIndex(root: root).search(SearchQuery(text: "file"), limit: 200)
+    #expect(result.items.count == 200)
+    #expect(result.totalCount == 30_000)
+    #expect(result.items.first?.size == 29_999)
+    #expect(zip(result.items, result.items.dropFirst()).allSatisfy { $0.size >= $1.size })
+}
+
+@Test func sunburstArcsFillTheirParentAngle() {
+    let root = indexFixture()
+    let arcs = Sunburst.layout(root: root)
+    let ring = arcs.filter { $0.depth == 1 }
+    #expect(abs(ring.reduce(0) { $0 + $1.span } - 2 * .pi) < 1e-9)
+    #expect(ring.first?.node?.name == "Copies" || ring.first?.node?.name == "Downloads")
+    for arc in arcs where arc.depth > 1 {
+        #expect(arcs.contains { $0.depth == arc.depth - 1 && $0.start <= arc.start + 1e-9 && $0.end >= arc.end - 1e-9 })
+    }
+    // Tiny slices fold into one grey "smaller items" arc rather than disappearing.
+    #expect(arcs.contains { $0.node == nil })
+}
+
+@Test func scanArchiveRoundTripsTreeAndMetadata() throws {
+    try withFixture { folder in
+        let sub = folder.appendingPathComponent("하위 폴더")
+        try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
+        try Data(repeating: 5, count: 50).write(to: sub.appendingPathComponent("사진.heic"))
+        try Data(repeating: 1, count: 7).write(to: folder.appendingPathComponent("a.txt"))
+        let report = try DiskScanner.scan(folder)
+        let decoded = try ScanArchive.decode(ScanArchive.encode(report))
+        #expect(decoded.isCached)
+        #expect(decoded.root.url.path == report.root.url.path)
+        #expect(decoded.root.size == 57 && decoded.root.fileCount == 2 && decoded.root.directoryCount == 1)
+        #expect(decoded.scannedAt.timeIntervalSinceReferenceDate == report.scannedAt.timeIntervalSinceReferenceDate)
+        let photo = decoded.root.findNode(path: sub.appendingPathComponent("사진.heic").path)
+        #expect(photo?.size == 50 && photo?.modified != nil && photo?.kind == .image)
+        #expect(throws: ScanArchive.Failure.self) { try ScanArchive.decode(Data("nope".utf8)) }
+        #expect(throws: ScanArchive.Failure.self) { try ScanArchive.decode(ScanArchive.encode(report).prefix(40)) }
+    }
+}

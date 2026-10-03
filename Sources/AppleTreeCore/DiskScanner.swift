@@ -16,7 +16,11 @@ public struct ScanProgress: Sendable {
 
 public struct ScanReport: Sendable, Codable {
     public let root: FileNode
-    public let filesBySize: [FileNode]
+    /// Computed on demand: the app searches through `SearchIndex`, so building
+    /// this for every scan or cache load would only cost time.
+    public var filesBySize: [FileNode] {
+        root.allFiles().sorted { $0.size == $1.size ? $0.name < $1.name : $0.size > $1.size }
+    }
     public let unreadableCount: Int
     public let unreadablePaths: [String]
     public let skippedLinks: Int
@@ -24,11 +28,10 @@ public struct ScanReport: Sendable, Codable {
     public let scannedAt: Date
     public let isCached: Bool
 
-    public init(root: FileNode, filesBySize: [FileNode]? = nil, unreadableCount: Int = 0,
+    public init(root: FileNode, unreadableCount: Int = 0,
                 unreadablePaths: [String] = [], skippedLinks: Int = 0,
                 elapsed: TimeInterval = 0, scannedAt: Date = Date(), isCached: Bool = false) {
         self.root = root
-        self.filesBySize = filesBySize ?? root.allFiles().sorted { $0.size == $1.size ? $0.id < $1.id : $0.size > $1.size }
         self.unreadableCount = unreadableCount
         self.unreadablePaths = unreadablePaths
         self.skippedLinks = skippedLinks
@@ -49,7 +52,7 @@ public struct ScanReport: Sendable, Codable {
         let skippedLinks = try container.decode(Int.self, forKey: .skippedLinks)
         let elapsed = try container.decode(TimeInterval.self, forKey: .elapsed)
         let scannedAt = try container.decodeIfPresent(Date.self, forKey: .scannedAt) ?? Date()
-        self.init(root: root, filesBySize: nil, unreadableCount: unreadableCount,
+        self.init(root: root, unreadableCount: unreadableCount,
                   unreadablePaths: unreadablePaths, skippedLinks: skippedLinks,
                   elapsed: elapsed, scannedAt: scannedAt, isCached: true)
     }
@@ -132,9 +135,8 @@ public enum DiskScanner {
 
         let root = try visit(url.standardizedFileURL.resolvingSymlinksInPath(), values: rootValues, isRoot: true)
         try Task.checkCancellation()
-        let allFiles = root.allFiles().sorted { $0.size == $1.size ? $0.id < $1.id : $0.size > $1.size }
         progress(ScanProgress(files: files, bytes: bytes, targetBytes: targetBytes, path: url.path))
-        return ScanReport(root: root, filesBySize: allFiles, unreadableCount: unreadableCount,
+        return ScanReport(root: root, unreadableCount: unreadableCount,
                           unreadablePaths: unreadablePaths, skippedLinks: skippedLinks,
                           elapsed: Date().timeIntervalSince(start), scannedAt: Date(), isCached: false)
     }

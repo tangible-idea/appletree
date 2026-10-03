@@ -8,6 +8,22 @@ enum BrowserMode: String, CaseIterable {
     var title: String { L10n.text("browser.\(rawValue)") }
 }
 
+enum MapStyle: String, CaseIterable {
+    case sunburst, treemap
+
+    var title: String { L10n.text("map.style.\(rawValue)") }
+    var symbol: String { self == .sunburst ? "circle.circle" : "square.grid.2x2" }
+}
+
+/// One line of the folder outline. A row with `hiddenCount` stands for the
+/// children of `node` that were left out of an expanded folder.
+struct OutlineRow: Identifiable {
+    let node: FileNode
+    let depth: Int
+    var hiddenCount = 0
+    var id: String { hiddenCount > 0 ? node.id + "#more" : node.id }
+}
+
 @MainActor
 final class AppStore: ObservableObject {
     @Published var root = DemoData.make()
@@ -18,19 +34,21 @@ final class AppStore: ObservableObject {
     @Published var progress: ScanProgress?
     @Published var report: ScanReport?
     @Published var query = "" {
-        didSet {
-            if !query.isEmpty && scopedFiles.isEmpty && current.id != root.id {
-                updateScopedFiles()
-            }
-        }
+        didSet { if query != oldValue { scheduleSearch(debounce: true) } }
+    }
+    @Published var kindFilter: Set<FileKind> = [] {
+        didSet { if kindFilter != oldValue { scheduleSearch() } }
+    }
+    @Published var preset: SearchPreset? {
+        didSet { if preset != oldValue { scheduleSearch() } }
     }
     @Published var mode: BrowserMode = .folders {
-        didSet {
-            if mode == .largest {
-                updateScopedFiles()
-            }
-        }
+        didSet { if mode != oldValue { scheduleSearch() } }
     }
+    @Published private(set) var results = SearchResult()
+    @Published private(set) var isSearching = false
+    @Published var expanded: Set<String> = []
+    @Published var mapStyle: MapStyle = .sunburst
     @Published var showMap = true
     @Published var errorMessage: String?
     @Published var trashCandidate: FileNode?
@@ -38,8 +56,9 @@ final class AppStore: ObservableObject {
     @Published var diskTotal: Int64 = 0
     @Published var diskFree: Int64 = 0
     @Published var showFDAPrompt = false
-    @Published private var scopedFiles: [FileNode] = []
-    private var allFiles: [FileNode] = []
+    private var indexTask: Task<SearchIndex, Never>?
+    private var searchTask: Task<Void, Never>?
+    private var sunburstCache: (id: String, arcs: [SunburstArc])?
     private var scanTask: Task<ScanReport, Error>?
     private var scanID = UUID()
     private var observationTask: Task<Void, Never>?
@@ -48,52 +67,122 @@ final class AppStore: ObservableObject {
 
     var current: FileNode { navigation.last ?? root }
     var breadcrumbs: [FileNode] { [root] + navigation }
+    var searchQuery: SearchQuery { SearchQuery(text: query, kinds: kindFilter, preset: preset) }
+    var hasFilters: Bool { !searchQuery.isEmpty }
+    /// Flat index results replace the folder outline when filtering or listing the largest files.
+    var isShowingResults: Bool { mode == .largest || hasFilters }
     var visibleItems: [FileNode] {
-        if query.isEmpty {
-            let items = mode == .largest ? scopedFiles : current.children
-            return Array(items.prefix(200))
-        }
-        let pool = mode == .largest || current.id != root.id ? (scopedFiles.isEmpty ? current.children : scopedFiles) : allFiles
-        let needle = query.lowercased()
-        var matches: [FileNode] = []
-        for node in pool {
-            if node.name.localizedCaseInsensitiveContains(needle) {
-                matches.append(node)
-                if matches.count >= 200 { break }
+        isShowingResults ? results.items : Array(current.children.prefix(Self.rowLimit))
+    }
+    var matchingCount: Int { isShowingResults ? results.totalCount : current.children.count }
+
+    nonisolated static let rowLimit = 200
+    nonisolated static let nestedRowLimit = 100
+
+    /// Current folder's children with expanded folders unfolded in place.
+    var outlineRows: [OutlineRow] {
+        if isShowingResults { return results.items.map { OutlineRow(node: $0, depth: 0) } }
+        var rows: [OutlineRow] = []
+        func add(_ children: [FileNode], depth: Int, limit: Int, parent: FileNode) {
+            for child in children.prefix(limit) {
+                rows.append(OutlineRow(node: child, depth: depth))
+                if child.isDirectory && expanded.contains(child.id) {
+                    add(child.children, depth: depth + 1, limit: Self.nestedRowLimit, parent: child)
+                }
+            }
+            if depth > 0 && children.count > limit {
+                rows.append(OutlineRow(node: parent, depth: depth, hiddenCount: children.count - limit))
             }
         }
-        return matches
+        add(current.children, depth: 0, limit: Self.rowLimit, parent: current)
+        return rows
     }
-    var matchingCount: Int {
-        if query.isEmpty {
-            return mode == .largest ? scopedFiles.count : current.children.count
+
+    func toggleExpanded(_ node: FileNode) {
+        guard node.isDirectory else { return }
+        if expanded.contains(node.id) { expanded.remove(node.id) } else { expanded.insert(node.id) }
+    }
+
+    func clearFilters() {
+        query = ""
+        kindFilter = []
+        preset = nil
+    }
+
+    func toggleKind(_ kind: FileKind) {
+        if kindFilter.contains(kind) { kindFilter.remove(kind) } else { kindFilter.insert(kind) }
+    }
+
+    var sunburstArcs: [SunburstArc] {
+        let node = current
+        if let cache = sunburstCache, cache.id == node.id { return cache.arcs }
+        let arcs = Sunburst.layout(root: node)
+        sunburstCache = (node.id, arcs)
+        return arcs
+    }
+
+    private func rebuildIndex() {
+        let root = root
+        indexTask = Task.detached(priority: .userInitiated) { SearchIndex(root: root) }
+        scheduleSearch()
+    }
+
+    private func scheduleSearch(debounce: Bool = false) {
+        searchTask?.cancel()
+        guard isShowingResults else {
+            results = SearchResult()
+            isSearching = false
+            return
         }
-        let pool = mode == .largest || current.id != root.id ? (scopedFiles.isEmpty ? current.children : scopedFiles) : allFiles
-        let needle = query.lowercased()
-        var count = 0
-        for node in pool {
-            if node.name.localizedCaseInsensitiveContains(needle) {
-                count += 1
-                if count >= 201 { break }
+        let query = searchQuery
+        let scope = current
+        let indexTask = indexTask
+        isSearching = true
+        searchTask = Task { [weak self] in
+            if debounce {
+                try? await Task.sleep(for: .milliseconds(120))
+                if Task.isCancelled { return }
             }
+            guard let index = await indexTask?.value, !Task.isCancelled else { return }
+            let result = await Task.detached(priority: .userInitiated) {
+                index.search(query, in: scope, limit: AppStore.rowLimit)
+            }.value
+            guard let self, !Task.isCancelled else { return }
+            // Small result sets animate in; very large swaps stay instant to keep typing smooth.
+            withAnimation(result.items.count <= 60 && self.results.items.count <= 60 ? .easeOut(duration: 0.2) : nil) {
+                self.results = result
+            }
+            self.isSearching = false
         }
-        return count
     }
+
+    /// Lets diagnostics wait for the debounced background search to land.
+    func waitForSearch() async {
+        await searchTask?.value
+    }
+
     var largestFolder: FileNode? { current.children.first { $0.isDirectory } }
     var diskUsedFraction: Double { diskTotal > 0 ? Double(diskTotal - diskFree) / Double(diskTotal) : 0 }
 
     init() {
         let args = CommandLine.arguments
         let isTesting = args.contains("--smoke-test") || args.contains("--snapshot")
-        allFiles = root.allFiles().sorted { $0.size > $1.size }
-        scopedFiles = allFiles
+        rebuildIndex()
         updateDisk(URL(fileURLWithPath: NSHomeDirectory()))
 
-        if !isTesting, let recent = ScanIndexCache.shared.loadMostRecent() {
+        guard !isTesting else { return }
+        let id = UUID()
+        scanID = id
+        isScanning = true
+        Task {
+            let recent = await ScanIndexCache.shared.loadMostRecent()
+            guard scanID == id else { return }
             var isDir: ObjCBool = false
-            if FileManager.default.fileExists(atPath: recent.root.url.path, isDirectory: &isDir), isDir.boolValue {
+            if let recent, FileManager.default.fileExists(atPath: recent.root.url.path, isDirectory: &isDir), isDir.boolValue {
                 applyScanResult(recent, url: recent.root.url)
                 notice = L10n.format("notice.cached", recent.root.name)
+            } else {
+                isScanning = false
             }
         }
     }
@@ -135,29 +224,51 @@ final class AppStore: ObservableObject {
     }
 
     func scan(_ url: URL, force: Bool = false) {
-        if !force {
-            if let cached = ScanIndexCache.shared.findNodeInCachedTrees(for: url) {
-                if cached.report.root.url.path == url.standardizedFileURL.path {
-                    applyScanResult(cached.report, url: url)
-                    notice = L10n.format("notice.cached", cached.report.root.name)
-                    return
-                } else if !isDemo && root.url.path == cached.report.root.url.path {
-                    navigate(to: cached.node)
-                    return
-                }
-            }
-        }
-
         scanTask?.cancel()
         let id = UUID()
         scanID = id
         isScanning = true
         progress = nil
         notice = nil
+        guard !force else { startScan(url, id: id); return }
 
+        // Loading a cached tree can take a moment for a whole disk, so it happens off the main thread.
+        Task {
+            let cached = await ScanIndexCache.shared.findNodeInCachedTrees(for: url)
+            guard scanID == id else { return }
+            guard let cached else { startScan(url, id: id); return }
+            if cached.report.root !== root || isDemo {
+                applyScanResult(cached.report, url: cached.report.root.url)
+                notice = L10n.format("notice.cached", cached.report.root.name)
+            }
+            isScanning = false
+            if cached.node !== root {
+                navigation = Self.ancestors(of: cached.node, in: root)
+                selected = nil
+                leaveFolderFilters()
+            }
+        }
+    }
+
+    /// Folders from just below `root` down to `node`, for jumping straight into a cached subfolder.
+    private static func ancestors(of node: FileNode, in root: FileNode) -> [FileNode] {
+        let target = node.url.path
+        var chain: [FileNode] = []
+        var cursor = root
+        while cursor !== node {
+            guard let next = cursor.children.first(where: {
+                $0.isDirectory && (target == $0.url.path || target.hasPrefix($0.url.path + "/"))
+            }) else { return [] }
+            chain.append(next)
+            cursor = next
+        }
+        return chain
+    }
+
+    private func startScan(_ url: URL, id: UUID) {
         var targetBytes: Int64?
-        if let cached = ScanIndexCache.shared.get(for: url) {
-            targetBytes = cached.root.size
+        if let cached = ScanIndexCache.shared.cachedSize(for: url) {
+            targetBytes = cached
         } else if let attrs = try? FileManager.default.attributesOfFileSystem(forPath: url.path),
                   let total = (attrs[.systemSize] as? NSNumber)?.int64Value,
                   let free = (attrs[.systemFreeSize] as? NSNumber)?.int64Value,
@@ -201,15 +312,18 @@ final class AppStore: ObservableObject {
     }
 
     private func applyScanResult(_ result: ScanReport, url: URL) {
+        let changed = result.root !== root
         root = result.root
         report = result
         navigation = []
         selected = nil
         query = ""
-        allFiles = result.filesBySize
-        scopedFiles = result.filesBySize
+        preset = nil
+        expanded = []
+        sunburstCache = nil
         isDemo = false
         isScanning = false
+        if changed { rebuildIndex() } else { scheduleSearch() }
         updateDisk(url)
     }
 
@@ -230,20 +344,14 @@ final class AppStore: ObservableObject {
         guard node.isDirectory else { selected = node; return }
         navigation.append(node)
         selected = nil
-        query = ""
-        if mode == .largest {
-            updateScopedFiles()
-        }
+        leaveFolderFilters()
     }
 
     func goBack() {
         guard !navigation.isEmpty else { return }
         navigation.removeLast()
         selected = nil
-        query = ""
-        if mode == .largest {
-            updateScopedFiles()
-        }
+        leaveFolderFilters()
     }
 
     func navigate(to node: FileNode) {
@@ -252,18 +360,14 @@ final class AppStore: ObservableObject {
             navigation = Array(navigation.prefix(index + 1))
         }
         selected = nil
-        query = ""
-        if mode == .largest {
-            updateScopedFiles()
-        }
+        leaveFolderFilters()
     }
 
-    private func updateScopedFiles() {
-        if current.id == root.id {
-            scopedFiles = allFiles
-        } else {
-            scopedFiles = current.allFiles().sorted { $0.size == $1.size ? $0.id < $1.id : $0.size > $1.size }
-        }
+    /// Moving between folders keeps the kind filter but drops one-off name searches and presets.
+    private func leaveFolderFilters() {
+        query = ""
+        preset = nil
+        scheduleSearch()
     }
 
     func reveal(_ node: FileNode) {

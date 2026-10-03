@@ -45,54 +45,108 @@ struct MapPanel: View {
                 Text(L10n.text("map.title")).font(.system(size: 15, weight: .semibold))
                 Text(L10n.text("map.subtitle")).font(.system(size: 10)).foregroundStyle(Theme.secondary)
                 Spacer()
-                Label(L10n.text("map.hint"), systemImage: "cursorarrow.click.2")
+                Label(L10n.text(store.mapStyle == .sunburst ? "map.hint.sunburst" : "map.hint"), systemImage: "cursorarrow.click.2")
                     .font(.system(size: 10)).foregroundStyle(Theme.secondary)
+                HStack(spacing: 2) {
+                    ForEach(MapStyle.allCases, id: \.self) { style in
+                        Button { withAnimation(.spring(duration: 0.4, bounce: 0.1)) { store.mapStyle = style } } label: {
+                            Image(systemName: style.symbol).font(.system(size: 11, weight: .medium))
+                                .frame(width: 28, height: 22)
+                                .foregroundStyle(store.mapStyle == style ? Theme.ink : Theme.secondary)
+                                .background(store.mapStyle == style ? .white : .clear, in: RoundedRectangle(cornerRadius: 5))
+                        }.buttonStyle(.plain).help(style.title).accessibilityLabel(style.title)
+                    }
+                }.padding(2).background(Theme.sidebar, in: RoundedRectangle(cornerRadius: 7))
             }
-            GeometryReader { proxy in
-                let nodes = items
-                let tiles = Treemap.layout(weights: nodes.map { $0.node.size }, in: CGRect(origin: .zero, size: proxy.size))
-                if tiles.isEmpty {
-                    VStack(spacing: 12) {
-                        Image(systemName: "folder").font(.system(size: 30)).foregroundStyle(Theme.secondary)
-                        Text(L10n.text("map.empty")).font(.system(size: 13)).foregroundStyle(Theme.secondary)
-                    }.frame(maxWidth: .infinity, maxHeight: .infinity).background(Theme.sidebar, in: RoundedRectangle(cornerRadius: 9))
+            Group {
+                if store.mapStyle == .sunburst {
+                    SunburstView()
                 } else {
-                    ZStack(alignment: .topLeading) {
-                        ForEach(tiles, id: \.index) { tile in
-                            let item = nodes[tile.index]
-                            MapTile(node: item.node, color: Theme.color(item.index),
-                                    total: store.current.size, selected: store.selected?.id == item.node.id,
-                                    grouped: item.grouped, width: tile.rect.width - 5, height: tile.rect.height - 5)
-                                .frame(width: max(0, tile.rect.width - 5), height: max(0, tile.rect.height - 5))
-                                .position(x: tile.rect.midX, y: tile.rect.midY)
-                                .onTapGesture(count: 2) {
-                                    if item.grouped { store.showMap = false }
-                                    else if item.node.isDirectory { store.enter(item.node) }
-                                    else { store.selected = item.node }
-                                }
-                                .onTapGesture { if !item.grouped { store.selected = item.node } }
-                                .contextMenu { if !item.grouped { NodeMenu(node: item.node) } }
-                                .help("\(item.node.name) · \(SizeText.format(item.node.size)) · \(percentage(item.node.size, store.current.size))%")
-                                .accessibilityElement(children: .ignore)
-                                .accessibilityLabel(L10n.format("map.accessibility", item.node.name, SizeText.format(item.node.size), percentage(item.node.size, store.current.size)))
-                                .accessibilityAddTraits(.isButton)
-                                .accessibilityAction { if item.grouped { store.showMap = false } else { store.open(item.node) } }
-                        }
-                    }
+                    treemap
                 }
-            }.frame(height: 244)
-            HStack(spacing: 16) {
-                ForEach(items.prefix(7)) { item in
-                    HStack(spacing: 5) {
-                        Circle().fill(Theme.color(item.index)).frame(width: 6, height: 6)
-                        Text(item.node.name).font(.system(size: 10)).foregroundStyle(Theme.secondary).lineLimit(1)
-                    }
-                }
-                Spacer(minLength: 0)
             }
+            .transition(.opacity.combined(with: .scale(scale: 0.97)))
         }
         .padding(20).background(.white, in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line, lineWidth: 1))
+    }
+
+    @ViewBuilder private var treemap: some View {
+        GeometryReader { proxy in
+            let nodes = items
+            let tiles = Treemap.layout(weights: nodes.map { $0.node.size }, in: CGRect(origin: .zero, size: proxy.size))
+            if tiles.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "folder").font(.system(size: 30)).foregroundStyle(Theme.secondary)
+                    Text(L10n.text("map.empty")).font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                }.frame(maxWidth: .infinity, maxHeight: .infinity).background(Theme.sidebar, in: RoundedRectangle(cornerRadius: 9))
+            } else {
+                ZStack(alignment: .topLeading) {
+                    ForEach(tiles, id: \.index) { tile in
+                        let delay = Double(tile.index) * 0.025
+                        let item = nodes[tile.index]
+                        MapTile(node: item.node, color: Theme.color(item.index),
+                                total: store.current.size, selected: store.selected?.id == item.node.id,
+                                grouped: item.grouped, width: tile.rect.width - 5, height: tile.rect.height - 5)
+                            .frame(width: max(0, tile.rect.width - 5), height: max(0, tile.rect.height - 5))
+                            .position(x: tile.rect.midX, y: tile.rect.midY)
+                            .onTapGesture(count: 2) {
+                                if item.grouped { store.showMap = false }
+                                else if item.node.isDirectory { store.enter(item.node) }
+                                else { store.selected = item.node }
+                            }
+                            .onTapGesture { if !item.grouped { store.selected = item.node } }
+                            .contextMenu { if !item.grouped { NodeMenu(node: item.node) } }
+                            .help("\(item.node.name) · \(SizeText.format(item.node.size)) · \(percentage(item.node.size, store.current.size))%")
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel(L10n.format("map.accessibility", item.node.name, SizeText.format(item.node.size), percentage(item.node.size, store.current.size)))
+                            .accessibilityAddTraits(.isButton)
+                            .accessibilityAction { if item.grouped { store.showMap = false } else { store.open(item.node) } }
+                            .transition(.scale(scale: 0.9).combined(with: .opacity).animation(.spring(duration: 0.4, bounce: 0.2).delay(delay)))
+                    }
+                }
+                // A new folder rebuilds every tile, so the transition replays per navigation.
+                .id(store.current.id)
+            }
+        }.frame(height: 300)
+        HStack(spacing: 16) {
+            ForEach(items.prefix(7)) { item in
+                HStack(spacing: 5) {
+                    Circle().fill(Theme.color(item.index)).frame(width: 6, height: 6)
+                    Text(item.node.name).font(.system(size: 10)).foregroundStyle(Theme.secondary).lineLimit(1)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+/// Children of a folder tile, drawn as translucent inner tiles with names where they fit.
+private struct NestedTiles: View {
+    let node: FileNode
+
+    var body: some View {
+        Canvas { context, size in
+            let children = Array(node.children.prefix(14))
+            let tiles = Treemap.layout(weights: children.map(\.size), in: CGRect(origin: .zero, size: size))
+            for tile in tiles {
+                let rect = tile.rect.insetBy(dx: 1.5, dy: 1.5)
+                guard rect.width > 2, rect.height > 2 else { continue }
+                let shape = Path(roundedRect: rect, cornerRadius: 4)
+                context.fill(shape, with: .color(.white.opacity(children[tile.index].isDirectory ? 0.2 : 0.12)))
+                if rect.width > 54 && rect.height > 22 {
+                    let child = children[tile.index]
+                    let label = Text(child.name).font(.system(size: 10, weight: .medium)).foregroundColor(.white.opacity(0.92))
+                    context.draw(context.resolve(label), in: CGRect(x: rect.minX + 6, y: rect.minY + 4,
+                                                                    width: rect.width - 12, height: 14))
+                    if rect.height > 40 {
+                        let size = Text(SizeText.format(child.size)).font(.system(size: 9, design: .rounded)).foregroundColor(.white.opacity(0.75))
+                        context.draw(context.resolve(size), in: CGRect(x: rect.minX + 6, y: rect.minY + 19,
+                                                                       width: rect.width - 12, height: 13))
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -108,11 +162,24 @@ private struct MapTile: View {
 
     private var big: Bool { width > 220 && height > 150 }
     private var showLabel: Bool { width > 64 && height > 45 }
+    /// Large folder tiles show their own children as a second, inner treemap.
+    private var nested: Bool { !grouped && node.isDirectory && node.children.count > 1 && width > 170 && height > 130 }
 
     var body: some View {
         ZStack(alignment: .topLeading) {
             RoundedRectangle(cornerRadius: 7).fill(color.gradient)
-            if showLabel {
+            if nested {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 6) {
+                        Image(systemName: node.kind.symbol).font(.system(size: 12, weight: .medium)).opacity(0.85)
+                        Text(node.name).font(.system(size: 13, weight: .semibold)).lineLimit(1).truncationMode(.middle)
+                        Spacer(minLength: 4)
+                        Text(SizeText.format(node.size)).font(.system(size: 12, weight: .semibold, design: .rounded))
+                    }
+                    NestedTiles(node: node)
+                }
+                .padding(10).foregroundStyle(.white)
+            } else if showLabel {
                 VStack(alignment: .leading, spacing: big ? 10 : 6) {
                     HStack(alignment: .top) {
                         Image(systemName: grouped ? "ellipsis" : node.kind.symbol)

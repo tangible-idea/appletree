@@ -12,13 +12,19 @@ struct ContentView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         heading
-                        if store.isScanning { scanningBanner }
-                        else if let notice = store.notice { noticeBanner(notice) }
+                        Group {
+                            if store.isScanning { scanningBanner }
+                            else if let notice = store.notice { noticeBanner(notice) }
+                        }.transition(.opacity.combined(with: .move(edge: .top)))
                         metrics
-                        if store.showMap { MapPanel() }
+                        if store.showMap {
+                            MapPanel().transition(.opacity.combined(with: .move(edge: .top)))
+                        }
                         FileListPanel()
                         footer
                     }.padding(.horizontal, 32).padding(.top, 27).padding(.bottom, 22)
+                    .animation(.spring(duration: 0.4, bounce: 0.1), value: store.isScanning)
+                    .animation(.spring(duration: 0.4, bounce: 0.1), value: store.notice)
                 }
             }
         }
@@ -132,6 +138,7 @@ struct ContentView: View {
                             .frame(width: max(8, proxy.size.width * fraction))
                     }
                 }
+                .animation(.easeOut(duration: 0.3), value: fraction)
             }
             .frame(height: 6)
 
@@ -198,6 +205,8 @@ struct MetricCard: View {
                 Image(systemName: symbol).font(.system(size: 14)).foregroundStyle(accent ? Theme.accent : Theme.secondary)
             }
             Text(value).font(.system(size: compact ? 24 : 29, weight: .semibold, design: .rounded))
+                .contentTransition(.numericText())
+                .animation(.snappy(duration: 0.35), value: value)
                 .tracking(-0.8).lineLimit(1).minimumScaleFactor(0.65)
                 .foregroundStyle(accent ? Theme.accent : Theme.ink)
             Text(detail).font(.system(size: 10)).foregroundStyle(Theme.secondary).lineLimit(1)

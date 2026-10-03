@@ -7,6 +7,7 @@ final class ScanIndexCache {
     static let shared = ScanIndexCache()
 
     private var memoryCache: [String: ScanReport] = [:]
+    private var loading: [String: Task<ScanReport?, Never>] = [:]
     private let cacheDirectory: URL
     private let manifestURL: URL
     private var manifest: [String: ManifestEntry] = [:]
@@ -42,7 +43,7 @@ final class ScanIndexCache {
         let digest = SHA256.hash(data: Data(key.utf8))
         let hashHex = digest.map { String(format: "%02x", $0) }.joined()
         let safeName = key.replacingOccurrences(of: "/", with: "_").prefix(30)
-        return "\(safeName)_\(hashHex.prefix(16)).plist"
+        return "\(safeName)_\(hashHex.prefix(16)).\(Self.fileExtension)"
     }
 
     private func fileURL(for key: String) -> URL {
@@ -50,12 +51,21 @@ final class ScanIndexCache {
         return cacheDirectory.appendingPathComponent(name)
     }
 
+    private static let fileExtension = "atix"
+
     private func loadManifest() {
         guard let data = try? Data(contentsOf: manifestURL),
               let decoded = try? PropertyListDecoder().decode([String: ManifestEntry].self, from: data) else {
             return
         }
-        manifest = decoded
+        // Earlier builds stored keyed property lists that took a minute to load for a
+        // home folder. They cannot be read cheaply, so drop them and rescan instead.
+        let legacy = decoded.values.filter { !$0.fileName.hasSuffix(".\(Self.fileExtension)") }
+        for entry in legacy {
+            try? FileManager.default.removeItem(at: cacheDirectory.appendingPathComponent(entry.fileName))
+        }
+        manifest = decoded.filter { $0.value.fileName.hasSuffix(".\(Self.fileExtension)") }
+        if !legacy.isEmpty { saveManifest() }
     }
 
     private func saveManifest() {
@@ -67,51 +77,52 @@ final class ScanIndexCache {
         }
     }
 
-    func get(for url: URL) -> ScanReport? {
-        let pathKey = key(for: canonicalPath(for: url))
-        if let memory = memoryCache[pathKey] {
-            return memory
-        }
-        let file = fileURL(for: pathKey)
-        if FileManager.default.fileExists(atPath: file.path),
-           let data = try? Data(contentsOf: file),
-           let report = try? PropertyListDecoder().decode(ScanReport.self, from: data) {
-            memoryCache[pathKey] = report
-            return report
-        }
-        return nil
+    /// Size recorded for an exact cached root, without loading the tree.
+    func cachedSize(for url: URL) -> Int64? {
+        manifest[key(for: canonicalPath(for: url))]?.size
     }
 
-    /// Finds a node within any previously scanned parent tree
-    func findNodeInCachedTrees(for url: URL) -> (report: ScanReport, node: FileNode)? {
+    /// Loads a cached tree, decoding off the main thread. Concurrent requests share one load.
+    func get(for url: URL) async -> ScanReport? {
+        let pathKey = key(for: canonicalPath(for: url))
+        if let memory = memoryCache[pathKey] { return memory }
+        if let pending = loading[pathKey] { return await pending.value }
+        guard manifest[pathKey] != nil else { return nil }
+        let file = fileURL(for: pathKey)
+        let task = Task.detached(priority: .userInitiated) { () -> ScanReport? in
+            guard let data = try? Data(contentsOf: file, options: .mappedIfSafe) else { return nil }
+            return try? ScanArchive.decode(data)
+        }
+        loading[pathKey] = task
+        let report = await task.value
+        loading[pathKey] = nil
+        if let report { memoryCache[pathKey] = report }
+        return report
+    }
+
+    /// Finds a node within any previously scanned parent tree.
+    func findNodeInCachedTrees(for url: URL) async -> (report: ScanReport, node: FileNode)? {
         let targetPath = canonicalPath(for: url)
 
-        // First check exact match
-        if let direct = get(for: url) {
+        if let direct = await get(for: url) {
             return (direct, direct.root)
         }
 
-        // Then check if any cached tree contains this path
-        for (_, report) in memoryCache {
-            let rootPath = canonicalPath(for: report.root.url)
-            if targetPath.hasPrefix(rootPath.hasSuffix("/") ? rootPath : rootPath + "/") {
-                if let found = report.root.findNode(path: targetPath) {
-                    return (report, found)
-                }
-            }
+        func contains(_ rootPath: String) -> Bool {
+            targetPath.hasPrefix(rootPath.hasSuffix("/") ? rootPath : rootPath + "/")
         }
 
-        // Also check manifest entries on disk
-        for entry in manifest.values {
-            let rootPath = entry.path
-            if targetPath.hasPrefix(rootPath.hasSuffix("/") ? rootPath : rootPath + "/") {
-                let rootURL = URL(fileURLWithPath: rootPath)
-                if let report = get(for: rootURL), let found = report.root.findNode(path: targetPath) {
-                    return (report, found)
-                }
-            }
+        for (_, report) in memoryCache where contains(canonicalPath(for: report.root.url)) {
+            if let found = report.root.findNode(path: targetPath) { return (report, found) }
         }
 
+        // Prefer the closest cached ancestor: it is the smallest tree to load.
+        for entry in manifest.values.filter({ contains($0.path) }).sorted(by: { $0.path.count > $1.path.count }) {
+            if let report = await get(for: URL(fileURLWithPath: entry.path)),
+               let found = report.root.findNode(path: targetPath) {
+                return (report, found)
+            }
+        }
         return nil
     }
 
@@ -127,19 +138,14 @@ final class ScanIndexCache {
 
         let file = cacheDirectory.appendingPathComponent(fileName)
         Task.detached(priority: .utility) {
-            let encoder = PropertyListEncoder()
-            encoder.outputFormat = .binary
-            if let data = try? encoder.encode(report) {
-                try? data.write(to: file, options: .atomic)
-            }
+            try? ScanArchive.encode(report).write(to: file, options: .atomic)
         }
     }
 
-    func loadMostRecent() -> ScanReport? {
+    func loadMostRecent() async -> ScanReport? {
         let sorted = manifest.values.sorted(by: { $0.scannedAt > $1.scannedAt })
         for entry in sorted {
-            let url = URL(fileURLWithPath: entry.path)
-            if let report = get(for: url) {
+            if let report = await get(for: URL(fileURLWithPath: entry.path)) {
                 return report
             }
         }

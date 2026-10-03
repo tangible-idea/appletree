@@ -1,20 +1,14 @@
 import Foundation
 
 public enum FileKind: String, CaseIterable, Sendable {
-    case folder, video, image, audio, archive, document, code, other
+    case folder, video, image, audio, archive, document, code
+    case certificate, installer, model, database, design, font, ebook, virtualMachine, log, other
 
-    public var title: String {
-        switch self {
-        case .folder: L10n.text("kind.folder")
-        case .video: L10n.text("kind.video")
-        case .image: L10n.text("kind.image")
-        case .audio: L10n.text("kind.audio")
-        case .archive: L10n.text("kind.archive")
-        case .document: L10n.text("kind.document")
-        case .code: L10n.text("kind.code")
-        case .other: L10n.text("kind.other")
-        }
-    }
+    /// Kinds that can be picked as search filters (files only).
+    public static let filterable: [FileKind] = [.image, .video, .audio, .document, .certificate, .installer, .archive,
+                                                .model, .virtualMachine, .database, .design, .font, .ebook, .code, .log]
+
+    public var title: String { L10n.text("kind.\(rawValue)") }
 
     public var symbol: String {
         switch self {
@@ -25,20 +19,55 @@ public enum FileKind: String, CaseIterable, Sendable {
         case .archive: "archivebox.fill"
         case .document: "doc.text.fill"
         case .code: "curlybraces"
+        case .certificate: "key.fill"
+        case .installer: "shippingbox.fill"
+        case .model: "brain"
+        case .database: "cylinder.split.1x2.fill"
+        case .design: "paintpalette.fill"
+        case .font: "textformat"
+        case .ebook: "book.closed.fill"
+        case .virtualMachine: "desktopcomputer"
+        case .log: "list.bullet.rectangle"
         case .other: "doc.fill"
         }
     }
 
-    public static func classify(_ url: URL) -> FileKind {
-        switch url.pathExtension.lowercased() {
-        case "mp4", "mov", "mkv", "avi", "webm", "m4v": .video
-        case "png", "jpg", "jpeg", "gif", "heic", "webp", "tiff", "raw", "psd", "svg": .image
-        case "mp3", "wav", "flac", "m4a", "aiff", "aac": .audio
-        case "zip", "dmg", "tar", "gz", "rar", "7z", "iso", "pkg": .archive
-        case "pdf", "doc", "docx", "txt", "md", "pages", "xls", "xlsx", "csv", "key", "pptx": .document
-        case "swift", "js", "ts", "tsx", "jsx", "py", "rs", "go", "json", "html", "css", "c", "h", "cpp": .code
-        default: .other
+    private static let byExtension: [String: FileKind] = {
+        var map: [String: FileKind] = [:]
+        func add(_ kind: FileKind, _ extensions: String) {
+            for ext in extensions.split(separator: " ") { map[String(ext)] = kind }
         }
+        add(.video, "mp4 mov mkv avi webm m4v wmv flv mpg mpeg 3gp mts m2ts")
+        add(.image, "png jpg jpeg gif heic heif webp tiff tif bmp svg ico raw dng cr2 cr3 nef arw raf orf rw2 srw avif")
+        add(.audio, "mp3 wav flac m4a aiff aif aac ogg opus wma caf")
+        add(.archive, "zip tar gz tgz bz2 xz zst rar 7z cab")
+        add(.installer, "dmg pkg mpkg iso ipa apk aab xip exe msi deb rpm appimage")
+        add(.document, "pdf doc docx txt md rtf pages numbers xls xlsx csv tsv ppt pptx odt ods odp hwp hwpx")
+        add(.code, "swift js ts tsx jsx py rs go json html css c h cpp hpp m mm java kt rb php sh yml yaml toml xml gradle")
+        add(.certificate, "jks keystore bks p8 p12 pfx pem cer crt der key csr pub ppk mobileprovision provisionprofile p7b p7c gpg asc")
+        add(.model, "gguf ggml safetensors ckpt pt pth onnx mlmodel mlpackage mlmodelc tflite h5 pb")
+        add(.database, "sqlite sqlite3 db realm parquet sql mdb accdb duckdb")
+        add(.design, "psd ai sketch fig xd afdesign afphoto blend indd")
+        add(.font, "ttf otf woff woff2 ttc dfont")
+        add(.ebook, "epub mobi azw azw3 ibooks")
+        add(.virtualMachine, "vmdk vdi qcow2 vhd vhdx utm vmwarevm pvm hdd")
+        add(.log, "log crash ips diag")
+        return map
+    }()
+
+    /// Secret-bearing files that are usually recognised by name rather than extension.
+    private static let certificateNames: Set<String> = [
+        "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", ".env", ".npmrc", ".netrc", ".pypirc", "credentials",
+        "credentials.json", "googleservice-info.plist", "google-services.json", "service-account.json"
+    ]
+
+    public static func classify(_ url: URL) -> FileKind { classify(name: url.lastPathComponent) }
+
+    public static func classify(name: String) -> FileKind {
+        let lower = name.lowercased()
+        if certificateNames.contains(lower) || lower.hasPrefix(".env.") { return .certificate }
+        guard let dot = lower.lastIndex(of: "."), dot != lower.startIndex else { return .other }
+        return byExtension[String(lower[lower.index(after: dot)...])] ?? .other
     }
 }
 
@@ -52,7 +81,7 @@ public final class FileNode: Identifiable, Sendable {
     public let directoryCount: Int
     public let children: [FileNode]
     public let modified: Date?
-    public var kind: FileKind { isDirectory ? .folder : FileKind.classify(url) }
+    public var kind: FileKind { isDirectory ? .folder : FileKind.classify(name: name) }
 
     public init(url: URL, name: String? = nil, isDirectory: Bool, size: Int64,
                 fileCount: Int? = nil, directoryCount: Int? = nil, children: [FileNode] = [], modified: Date? = nil) {
