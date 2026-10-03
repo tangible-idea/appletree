@@ -44,3 +44,14 @@ import Testing
     #expect(L10n.count(.subfolders, 2, language: "en") == "2 subfolders")
     #expect(L10n.count(.items, 1, language: "en") == "1 item")
 }
+
+@Test func inAppLanguageOverridesAndRestoresSystemLanguage() {
+    defer { L10n.setLanguage(nil) }
+    L10n.setLanguage("ko")
+    #expect(L10n.language == "ko")
+    #expect(L10n.text("action.scan") == "폴더 분석")
+    L10n.setLanguage("fr")
+    #expect(L10n.language == L10n.systemLanguage)
+    L10n.setLanguage(nil)
+    #expect(L10n.language == L10n.systemLanguage)
+}

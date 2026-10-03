@@ -102,7 +102,12 @@ struct Sidebar: View {
             HStack(spacing: 6) {
                 Image(systemName: "leaf").font(.system(size: 11))
                 Text(L10n.text("sidebar.tagline")).font(.system(size: 10))
-            }.foregroundStyle(Theme.secondary).padding(.horizontal, 28).padding(.bottom, 23)
+                Spacer(minLength: 4)
+                SettingsLink {
+                    Image(systemName: "gearshape").font(.system(size: 12))
+                }
+                .buttonStyle(.plain).help(L10n.text("sidebar.settings")).accessibilityLabel(L10n.text("sidebar.settings"))
+            }.foregroundStyle(Theme.secondary).padding(.leading, 28).padding(.trailing, 20).padding(.bottom, 23)
         }
         .frame(width: 218).background(Theme.sidebar)
         .overlay(alignment: .trailing) { Rectangle().fill(Theme.line).frame(width: 1) }

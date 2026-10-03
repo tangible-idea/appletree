@@ -25,14 +25,30 @@ public enum SearchPreset: String, CaseIterable, Sendable {
 }
 
 public struct SearchQuery: Sendable, Equatable {
+    /// How `text` is read: part of a name, a list of extensions, or a regular expression over names.
+    public enum Mode: String, CaseIterable, Sendable {
+        case name, ext, regex
+    }
+
     public var text: String
+    public var mode: Mode
     public var kinds: Set<FileKind>
     public var preset: SearchPreset?
 
-    public init(text: String = "", kinds: Set<FileKind> = [], preset: SearchPreset? = nil) {
+    public init(text: String = "", mode: Mode = .name, kinds: Set<FileKind> = [], preset: SearchPreset? = nil) {
         self.text = text
+        self.mode = mode
         self.kinds = kinds
         self.preset = preset
+    }
+
+    /// Extensions typed as "jks p8, .pem *.p12", lowercased and without dots.
+    public var extensions: [String] {
+        trimmedText.split(whereSeparator: { $0 == " " || $0 == "," || $0 == ";" }).compactMap { part in
+            var ext = Substring(part)
+            while let first = ext.first, first == "*" || first == "." { ext = ext.dropFirst() }
+            return ext.isEmpty ? nil : SearchIndex.normalize(String(ext))
+        }
     }
 
     public var trimmedText: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -43,16 +59,25 @@ public struct SearchResult: Sendable {
     public let items: [FileNode]
     public let totalCount: Int
     public let totalSize: Int64
+    /// The regular expression in the query could not be compiled.
+    public let invalidPattern: Bool
 
-    public init(items: [FileNode] = [], totalCount: Int = 0, totalSize: Int64 = 0) {
+    public init(items: [FileNode] = [], totalCount: Int = 0, totalSize: Int64 = 0, invalidPattern: Bool = false) {
         self.items = items
         self.totalCount = totalCount
         self.totalSize = totalSize
+        self.invalidPattern = invalidPattern
     }
 }
 
 /// Flat, size-ordered index over a scanned tree. Built once off the main thread;
 /// every query is a linear scan over pre-normalised names, split across cores.
+/// `NSRegularExpression` is immutable and documented as safe to share across threads.
+private final class RegexBox: @unchecked Sendable {
+    let regex: NSRegularExpression
+    init(_ regex: NSRegularExpression) { self.regex = regex }
+}
+
 public final class SearchIndex: Sendable {
     struct Entry: Sendable {
         let node: FileNode
@@ -179,13 +204,59 @@ public final class SearchIndex: Sendable {
     }
 
     public func search(_ query: SearchQuery, in scope: FileNode? = nil, limit: Int = 200, now: Date = Date()) -> SearchResult {
+        guard let found = matches(query, in: scope, limit: limit, now: now) else { return SearchResult(invalidPattern: true) }
+        return SearchResult(items: found.indices.map { entries[$0].node }, totalCount: found.count, totalSize: found.size)
+    }
+
+    /// Every match, minus items already inside a matched folder, in tree order:
+    /// the set of paths to hand to an archiver without adding anything twice.
+    public func exportRoots(_ query: SearchQuery, in scope: FileNode? = nil, now: Date = Date()) -> [FileNode] {
+        guard let found = matches(query, in: scope, limit: .max, now: now) else { return [] }
+        var roots: [FileNode] = []
+        var coveredUntil: Int32 = -1
+        for index in found.indices.sorted(by: { entries[$0].order < entries[$1].order }) {
+            let entry = entries[index]
+            if entry.order < coveredUntil { continue }
+            roots.append(entry.node)
+            if entry.node.isDirectory, let range = ranges[ObjectIdentifier(entry.node)] { coveredUntil = range.upperBound }
+        }
+        return roots
+    }
+
+    /// Entry indices (size order, up to `limit`) plus totals over all matches; nil for an invalid regex.
+    private func matches(_ query: SearchQuery, in scope: FileNode?, limit: Int, now: Date)
+        -> (indices: [Int], count: Int, size: Int64)? {
         let range = scope.flatMap { ranges[ObjectIdentifier($0)] }
-        let needle = Array(SearchIndex.normalize(query.trimmedText).utf8)
+        let text = query.trimmedText
         let kinds = query.kinds
         let preset = query.preset
+        let nameMatches: (@Sendable (String) -> Bool)?
+        switch query.mode {
+        case .name:
+            let needle = Array(SearchIndex.normalize(text).utf8)
+            if needle.isEmpty { nameMatches = nil } else { nameMatches = { key in SearchIndex.contains(key, needle) } }
+        case .ext:
+            let suffixes: [[UInt8]] = query.extensions.map { Array(".\($0)".utf8) }
+            if suffixes.isEmpty {
+                nameMatches = nil
+            } else {
+                nameMatches = { key in suffixes.contains { SearchIndex.hasSuffix(key, $0) } }
+            }
+        case .regex:
+            if text.isEmpty {
+                nameMatches = nil
+            } else {
+                // Names are matched in their normalised (lowercased, composed) form, so case never matters.
+                guard let regex = try? NSRegularExpression(pattern: text, options: [.caseInsensitive]) else { return nil }
+                let box = RegexBox(regex)
+                nameMatches = { key in
+                    box.regex.firstMatch(in: key, range: NSRange(location: 0, length: (key as NSString).length)) != nil
+                }
+            }
+        }
         let foldersOnly = preset?.matchesFolders == true
-        // Folders appear only for a plain name search; kind filters and file presets want files.
-        let allowFolders = foldersOnly || (!needle.isEmpty && kinds.isEmpty && preset == nil)
+        // Folders appear only for a plain text search; kind filters and file presets want files.
+        let allowFolders = foldersOnly || (nameMatches != nil && kinds.isEmpty && preset == nil)
         let reference = now.timeIntervalSinceReferenceDate
         let day = 86_400.0
 
@@ -208,7 +279,7 @@ public final class SearchIndex: Sendable {
                 case .emptyFolders: if entry.flags & Flag.empty == 0 { return false }
                 }
             }
-            if !needle.isEmpty && !SearchIndex.contains(entry.key, needle) { return false }
+            if let nameMatches, !nameMatches(entry.key) { return false }
             return true
         }
 
@@ -246,15 +317,22 @@ public final class SearchIndex: Sendable {
         if chunks == 1 { scan(0) } else { DispatchQueue.concurrentPerform(iterations: chunks, execute: scan) }
 
         // Chunks are contiguous slices of a size-sorted array, so concatenation keeps the order.
-        var items: [FileNode] = []
-        items.reserveCapacity(limit)
+        var indices: [Int] = []
+        indices.reserveCapacity(min(limit, total))
         for hits in partial.hits {
             for index in hits {
-                guard items.count < limit else { break }
-                items.append(entries[index].node)
+                guard indices.count < limit else { break }
+                indices.append(index)
             }
         }
-        return SearchResult(items: items, totalCount: partial.counts.reduce(0, +), totalSize: partial.sizes.reduce(0, +))
+        return (indices, partial.counts.reduce(0, +), partial.sizes.reduce(0, +))
+    }
+
+    static func hasSuffix(_ haystack: String, _ suffix: [UInt8]) -> Bool {
+        var haystack = haystack
+        return haystack.withUTF8 { bytes in
+            bytes.count >= suffix.count && bytes.suffix(suffix.count).elementsEqual(suffix)
+        }
     }
 
     static func contains(_ haystack: String, _ needle: [UInt8]) -> Bool {

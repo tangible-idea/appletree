@@ -260,3 +260,36 @@ private func indexFixture() -> FileNode {
         #expect(throws: ScanArchive.Failure.self) { try ScanArchive.decode(ScanArchive.encode(report).prefix(40)) }
     }
 }
+
+@Test func searchByExtensionListMatchesWholeExtensionsOnly() {
+    let index = SearchIndex(root: indexFixture())
+    #expect(SearchQuery(text: "*.JKS, .p8 pem;").extensions == ["jks", "p8", "pem"])
+    #expect(index.search(SearchQuery(text: "jks", mode: .ext)).items.map(\.name) == ["release.jks"])
+    #expect(Set(index.search(SearchQuery(text: "dmg js", mode: .ext)).items.map(\.name)) == ["setup.dmg", "a.js", "x.js"])
+    // "js" must not match ".json".
+    let jsNames = index.search(SearchQuery(text: "js", mode: .ext)).items.map(\.name)
+    #expect(!jsNames.contains("package.json"))
+}
+
+@Test func searchByRegexIsCaseInsensitiveAndReportsBadPatterns() {
+    let index = SearchIndex(root: indexFixture())
+    #expect(index.search(SearchQuery(text: "^SETUP\\.dmg$", mode: .regex)).totalCount == 2)
+    #expect(index.search(SearchQuery(text: "^스크린샷 \\d{4}", mode: .regex)).totalCount == 1)
+    let nodeFolders = index.search(SearchQuery(text: "^node_", mode: .regex)).items
+    #expect(nodeFolders.count == 2 && nodeFolders.allSatisfy(\.isDirectory))
+    let bad = index.search(SearchQuery(text: "([", mode: .regex))
+    #expect(bad.invalidPattern && bad.items.isEmpty)
+    #expect(index.exportRoots(SearchQuery(text: "([", mode: .regex)).isEmpty)
+}
+
+@Test func exportRootsSkipItemsInsideMatchedFolders() {
+    let root = indexFixture()
+    let index = SearchIndex(root: root)
+    // "node" matches both node_modules folders; only the outer one should be archived.
+    #expect(index.exportRoots(SearchQuery(text: "node")).map(\.name) == ["node_modules"])
+    let all = index.exportRoots(SearchQuery(kinds: [.certificate]))
+    #expect(Set(all.map(\.name)) == ["release.jks", ".env"])
+    let project = root.children.first { $0.name == "Project" }!
+    // "e" also matches left-pad and the inner node_modules, which ride along with the outer folder.
+    #expect(index.exportRoots(SearchQuery(text: "e"), in: project).map(\.name) == ["release.jks", "node_modules", "package.json"])
+}

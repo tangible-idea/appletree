@@ -27,16 +27,8 @@ struct FileListPanel: View {
                     if store.isSearching { ProgressView().controlSize(.mini) }
                 }.font(.system(size: 10)).foregroundStyle(Theme.secondary)
                 Spacer(minLength: 4)
-                HStack(spacing: 6) {
-                    Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundStyle(Theme.secondary)
-                    TextField(L10n.text("list.search"), text: $store.query)
-                        .textFieldStyle(.plain).font(.system(size: 11)).frame(width: 164)
-                        .accessibilityLabel(L10n.text("list.search"))
-                    if !store.query.isEmpty {
-                        Button { store.query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.secondary) }
-                            .buttonStyle(.plain).accessibilityLabel(L10n.text("list.clearSearch"))
-                    }
-                }.padding(8).background(Theme.background, in: RoundedRectangle(cornerRadius: 7))
+                ExportControl()
+                SearchField()
                 Button { withAnimation(.spring(duration: 0.4, bounce: 0.1)) { store.showMap.toggle() } } label: {
                     Image(systemName: store.showMap ? "rectangle.grid.1x2" : "square.grid.2x2")
                         .font(.system(size: 13)).foregroundStyle(Theme.secondary)
@@ -57,8 +49,10 @@ struct FileListPanel: View {
 
             if rows.isEmpty {
                 VStack(spacing: 9) {
-                    Image(systemName: store.isShowingResults ? "magnifyingglass" : "tray").font(.system(size: 24))
-                    Text(store.isShowingResults ? L10n.text("list.noResults") : L10n.text("list.empty")).font(.system(size: 12))
+                    Image(systemName: store.results.invalidPattern ? "exclamationmark.triangle"
+                          : (store.isShowingResults ? "magnifyingglass" : "tray")).font(.system(size: 24))
+                    Text(store.results.invalidPattern ? L10n.text("list.invalidRegex")
+                         : (store.isShowingResults ? L10n.text("list.noResults") : L10n.text("list.empty"))).font(.system(size: 12))
                 }.foregroundStyle(Theme.secondary).frame(maxWidth: .infinity).padding(40)
             } else {
                 LazyVStack(spacing: 0) {
@@ -82,6 +76,90 @@ struct FileListPanel: View {
         .background(.white, in: RoundedRectangle(cornerRadius: 12))
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line, lineWidth: 1))
+    }
+}
+
+/// Search box with a mode menu: part of a name, extensions only, or a regular expression.
+private struct SearchField: View {
+    @EnvironmentObject private var store: AppStore
+
+    private func placeholder(_ mode: SearchQuery.Mode) -> String {
+        switch mode {
+        case .name: L10n.text("list.search")
+        case .ext: L10n.text("search.placeholder.ext")
+        case .regex: L10n.text("search.placeholder.regex")
+        }
+    }
+
+    var body: some View {
+        let invalid = store.results.invalidPattern && store.searchMode == .regex && !store.query.isEmpty
+        HStack(spacing: 6) {
+            Menu {
+                ForEach(SearchQuery.Mode.allCases, id: \.self) { mode in
+                    Button {
+                        store.searchMode = mode
+                    } label: {
+                        Label(L10n.text("search.mode.\(mode.rawValue)"), systemImage: store.searchMode == mode ? "checkmark" : Self.symbol(mode))
+                    }
+                }
+            } label: {
+                HStack(spacing: 3) {
+                    Image(systemName: Self.symbol(store.searchMode)).font(.system(size: 10, weight: .semibold))
+                    Text(L10n.text("search.mode.\(store.searchMode.rawValue)")).font(.system(size: 10, weight: .semibold))
+                }
+            }
+            .menuStyle(.borderlessButton).fixedSize()
+            .foregroundStyle(store.searchMode == .name ? Theme.secondary : Theme.accent)
+            .help(L10n.text("search.mode.help"))
+            Rectangle().fill(Theme.line).frame(width: 1, height: 14)
+            TextField(placeholder(store.searchMode), text: $store.query)
+                .textFieldStyle(.plain).font(.system(size: 11, design: store.searchMode == .regex ? .monospaced : .default))
+                .frame(width: 170)
+                .accessibilityLabel(L10n.text("list.search"))
+            if !store.query.isEmpty {
+                Button { store.query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.secondary) }
+                    .buttonStyle(.plain).accessibilityLabel(L10n.text("list.clearSearch"))
+            }
+        }
+        .padding(8)
+        .background(invalid ? Theme.kindColor(.certificate).opacity(0.08) : Theme.background, in: RoundedRectangle(cornerRadius: 7))
+        .overlay(RoundedRectangle(cornerRadius: 7).stroke(invalid ? Theme.kindColor(.certificate).opacity(0.5) : .clear, lineWidth: 1))
+        .help(invalid ? L10n.text("list.invalidRegex") : "")
+        .animation(.easeOut(duration: 0.15), value: invalid)
+    }
+
+    static func symbol(_ mode: SearchQuery.Mode) -> String {
+        switch mode {
+        case .name: "magnifyingglass"
+        case .ext: "number"
+        case .regex: "chevron.left.forwardslash.chevron.right"
+        }
+    }
+}
+
+/// Saves every current match as a zip; shows progress and a cancel button while it runs.
+private struct ExportControl: View {
+    @EnvironmentObject private var store: AppStore
+
+    var body: some View {
+        if let progress = store.exportProgress {
+            HStack(spacing: 8) {
+                ProgressView(value: progress).frame(width: 70).tint(Theme.accent)
+                Text(L10n.format("export.running", Int(progress * 100).formatted()))
+                    .font(.system(size: 10, weight: .medium)).foregroundStyle(Theme.secondary).monospacedDigit()
+                Button { store.cancelExport() } label: { Image(systemName: "xmark.circle.fill") }
+                    .buttonStyle(.plain).foregroundStyle(Theme.secondary).help(L10n.text("action.cancel"))
+            }
+            .transition(.opacity)
+        } else if store.isShowingResults && store.results.totalCount > 0 && !store.isDemo {
+            Button { store.exportResults() } label: {
+                Label(L10n.text("export.button"), systemImage: "archivebox")
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .buttonStyle(QuietButtonStyle())
+            .help(L10n.format("export.help", store.results.totalCount.formatted()))
+            .transition(.opacity.combined(with: .scale(scale: 0.9)))
+        }
     }
 }
 

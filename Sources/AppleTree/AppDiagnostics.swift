@@ -31,7 +31,7 @@ enum AppDiagnostics {
                 }
                 if args.contains("--smoke-test") {
                     try await smokeTest(store)
-                    print("App integration checks passed: scan, navigation, search, largest files, refresh, cancellation, error recovery.")
+                    print("App integration checks passed: scan, navigation, search, extension/regex search, zip export, largest files, refresh, cancellation, error recovery.")
                 }
                 // An error sheet may veto the normal Cocoa quit request in the
                 // error-recovery check. A completed diagnostic must exit reliably.
@@ -74,6 +74,33 @@ enum AppDiagnostics {
         store.toggleExpanded(store.root.children[0])
         try require(store.outlineRows.map(\.node.name) == ["Nested", "movie.mp4", "note.txt"], "Outline expansion failed")
         try require(!store.sunburstArcs.isEmpty, "Ring chart layout failed")
+        store.searchMode = .ext
+        store.query = "mp4 txt"
+        await store.waitForSearch()
+        try require(store.matchingCount == 2, "Extension search failed")
+        store.searchMode = .regex
+        store.query = "^(movie|note)\\."
+        await store.waitForSearch()
+        try require(store.matchingCount == 2, "Regex search failed")
+        let roots = SearchIndex(root: store.root).exportRoots(store.searchQuery, in: store.root)
+        // Outside the fixture, so the later refresh check still sees the original 250 bytes.
+        let archive = FileManager.default.temporaryDirectory.appendingPathComponent("AppleTree-export-\(UUID().uuidString).zip")
+        defer { try? FileManager.default.removeItem(at: archive) }
+        try await ArchiveExporter.zip(roots, base: store.root.url, to: archive) { _ in }
+        let listing = Process()
+        let output = Pipe()
+        listing.executableURL = URL(fileURLWithPath: "/usr/bin/bsdtar")
+        listing.arguments = ["-tf", archive.path]
+        listing.standardOutput = output
+        try listing.run()
+        listing.waitUntilExit()
+        let names = Set(String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self).split(separator: "\n").map(String.init))
+        try require(names == ["Nested/movie.mp4", "note.txt"], "Zip export failed: \(names)")
+        store.query = "(["
+        await store.waitForSearch()
+        try require(store.results.invalidPattern, "Invalid regex not reported")
+        store.searchMode = .name
+        store.query = ""
         store.mode = .largest
         store.refresh()
         try await waitForScan(store)

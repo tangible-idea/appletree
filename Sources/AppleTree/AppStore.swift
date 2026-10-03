@@ -36,6 +36,12 @@ final class AppStore: ObservableObject {
     @Published var query = "" {
         didSet { if query != oldValue { scheduleSearch(debounce: true) } }
     }
+    @Published var searchMode: SearchQuery.Mode = .name {
+        didSet { if searchMode != oldValue && !query.isEmpty { scheduleSearch() } }
+    }
+    /// Progress of a running zip export, 0…1; nil when none is running.
+    @Published private(set) var exportProgress: Double?
+    private var exportTask: Task<Void, Never>?
     @Published var kindFilter: Set<FileKind> = [] {
         didSet { if kindFilter != oldValue { scheduleSearch() } }
     }
@@ -67,7 +73,7 @@ final class AppStore: ObservableObject {
 
     var current: FileNode { navigation.last ?? root }
     var breadcrumbs: [FileNode] { [root] + navigation }
-    var searchQuery: SearchQuery { SearchQuery(text: query, kinds: kindFilter, preset: preset) }
+    var searchQuery: SearchQuery { SearchQuery(text: query, mode: searchMode, kinds: kindFilter, preset: preset) }
     var hasFilters: Bool { !searchQuery.isEmpty }
     /// Flat index results replace the folder outline when filtering or listing the largest files.
     var isShowingResults: Bool { mode == .largest || hasFilters }
@@ -140,7 +146,8 @@ final class AppStore: ObservableObject {
         isSearching = true
         searchTask = Task { [weak self] in
             if debounce {
-                try? await Task.sleep(for: .milliseconds(120))
+                // Regular expressions cost more per name, so wait a little longer for typing to settle.
+                try? await Task.sleep(for: .milliseconds(query.mode == .regex ? 250 : 120))
                 if Task.isCancelled { return }
             }
             guard let index = await indexTask?.value, !Task.isCancelled else { return }
@@ -154,6 +161,57 @@ final class AppStore: ObservableObject {
             }
             self.isSearching = false
         }
+    }
+
+    /// Asks where to save, then zips every current match (not just the rows on screen),
+    /// keeping paths relative to the current folder.
+    func exportResults() {
+        guard !isDemo, exportProgress == nil, isShowingResults, results.totalCount > 0 else { return }
+        let panel = NSSavePanel()
+        panel.title = L10n.text("export.panelTitle")
+        panel.message = L10n.format("export.message", results.totalCount.formatted(), SizeText.format(results.totalSize))
+        panel.allowedContentTypes = [.zip]
+        panel.canCreateDirectories = true
+        let stamp = Date().formatted(.iso8601.year().month().day())
+        panel.nameFieldStringValue = "\(current.name)-\(stamp).zip"
+        panel.begin { [weak self] response in
+            guard response == .OK, let destination = panel.url else { return }
+            Task { @MainActor in self?.startExport(to: destination) }
+        }
+    }
+
+    private func startExport(to destination: URL) {
+        let query = searchQuery
+        let scope = current
+        let indexTask = indexTask
+        exportProgress = 0
+        exportTask = Task { [weak self] in
+            guard let index = await indexTask?.value else { return }
+            let roots = await Task.detached(priority: .userInitiated) { index.exportRoots(query, in: scope) }.value
+            do {
+                try await ArchiveExporter.zip(roots, base: scope.url, to: destination) { value in
+                    Task { @MainActor in
+                        guard let self, self.exportProgress != nil else { return }
+                        self.exportProgress = value
+                    }
+                }
+                guard let self else { return }
+                self.exportProgress = nil
+                self.notice = L10n.format("export.done", roots.count.formatted(), destination.lastPathComponent)
+                NSWorkspace.shared.activateFileViewerSelecting([destination])
+            } catch is CancellationError {
+                self?.exportProgress = nil
+            } catch {
+                self?.exportProgress = nil
+                self?.errorMessage = L10n.format("error.export", error.localizedDescription)
+            }
+        }
+    }
+
+    func cancelExport() {
+        exportTask?.cancel()
+        exportTask = nil
+        exportProgress = nil
     }
 
     /// Lets diagnostics wait for the debounced background search to land.
@@ -325,6 +383,17 @@ final class AppStore: ObservableObject {
         isScanning = false
         if changed { rebuildIndex() } else { scheduleSearch() }
         updateDisk(url)
+    }
+
+    /// Strings already built for the old language (sample data, banners) are refreshed.
+    func languageDidChange() {
+        notice = nil
+        sunburstCache = nil
+        guard isDemo else { return }
+        root = DemoData.make()
+        navigation = []
+        selected = nil
+        rebuildIndex()
     }
 
     func cancelScan() {
