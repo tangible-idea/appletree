@@ -1,0 +1,51 @@
+name: AppleTree
+options:
+  bundleIdPrefix: com.appletree
+  deploymentTarget:
+    macOS: "14.0"
+  defaultConfig: Release
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+targets:
+  AppleTreeCore:
+    type: library.static
+    platform: macOS
+    sources:
+      - path: Sources/AppleTreeCore
+        excludes:
+          - "Resources/**"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.appletree.AppleTreeCore
+        DEFINES_MODULE: true
+        SKIP_INSTALL: true
+  AppleTree:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/AppleTree
+      - path: Sources/AppleTreeCore/Resources
+    dependencies:
+      - target: AppleTreeCore
+    info:
+      path: Resources/Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.appletree.mac
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_ENTITLEMENTS: Resources/AppleTree.entitlements
+        INFOPLIST_FILE: Resources/Info.plist
+  AppleTreeCoreTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests/AppleTreeCoreTests
+      - path: Sources/AppleTreeCore/Resources
+    dependencies:
+      - target: AppleTreeCore
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: true
+        PRODUCT_BUNDLE_IDENTIFIER: com.appletree.AppleTreeCoreTests

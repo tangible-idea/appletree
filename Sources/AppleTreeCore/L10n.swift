@@ -27,11 +27,16 @@ public enum L10n {
         // Packaged .app builds keep SwiftPM resources in Contents/Resources.
         if let url = Bundle.main.resourceURL?.appendingPathComponent("AppleTree_AppleTreeCore.bundle"),
            let bundle = Bundle(url: url) { return bundle }
+        #if SWIFT_PACKAGE
         return Bundle.module
+        #else
+        return Bundle(for: FileNode.self)
+        #endif
     }()
 
     private static let bundles: [String: Bundle] = Dictionary(uniqueKeysWithValues: supportedLanguages.compactMap { code in
-        guard let path = resourceBundle.path(forResource: code, ofType: "lproj"),
+        guard let path = resourceBundle.path(forResource: code, ofType: "lproj")
+                ?? Bundle.main.path(forResource: code, ofType: "lproj"),
               let bundle = Bundle(path: path) else { return nil }
         return (code, bundle)
     })

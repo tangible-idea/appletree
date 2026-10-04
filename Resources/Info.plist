@@ -2,25 +2,21 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleName</key><string>AppleTree</string>
-    <key>CFBundleDisplayName</key><string>AppleTree</string>
-    <key>CFBundleIdentifier</key><string>com.appletree.mac</string>
-    <key>CFBundleDevelopmentRegion</key><string>en</string>
-    <key>CFBundleLocalizations</key><array><string>en</string><string>ko</string></array>
-    <key>CFBundleExecutable</key><string>AppleTree</string>
-    <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>1.0.0</string>
-    <key>CFBundleVersion</key><string>1</string>
-    <key>CFBundleIconFile</key><string>AppleTree</string>
-    <key>LSMinimumSystemVersion</key><string>14.0</string>
-    <key>NSHighResolutionCapable</key><true/>
-    <key>NSPrincipalClass</key><string>NSApplication</string>
-    <key>NSHumanReadableCopyright</key><string>AppleTree</string>
-    <key>NSDesktopFolderUsageDescription</key><string>AppleTree requires access to your Desktop folder to measure disk space.</string>
-    <key>NSDocumentsFolderUsageDescription</key><string>AppleTree requires access to your Documents folder to measure disk space.</string>
-    <key>NSDownloadsFolderUsageDescription</key><string>AppleTree requires access to your Downloads folder to measure disk space.</string>
-    <key>NSRemovableVolumesUsageDescription</key><string>AppleTree requires access to removable volumes to measure disk space.</string>
-    <key>NSNetworkVolumesUsageDescription</key><string>AppleTree requires access to network volumes to measure disk space.</string>
-    <key>NSFullDiskAccessUsageDescription</key><string>AppleTree requires Full Disk Access to scan all files without repeated folder permission prompts.</string>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
 </dict>
 </plist>
