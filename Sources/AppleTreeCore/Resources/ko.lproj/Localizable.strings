@@ -172,7 +172,7 @@
 
 // Smart cleanup
 "cleanup.title" = "알아서 정리";
-"cleanup.subtitle" = "Mole로 정리 후보를 찾고, 저장한 범위 안에서 정리합니다.";
+"cleanup.subtitle" = "정리 후보를 찾고, 저장한 범위 안에서 정리합니다.";
 "cleanup.scope.title" = "정리 범위";
 "cleanup.category.appCaches" = "앱 캐시";
 "cleanup.category.appCaches.detail" = "사용자 Library의 오래된 캐시 파일. 사용 중인 앱과 보호한 데이터는 건너뜁니다.";
@@ -187,7 +187,7 @@
 "cleanup.protect.title" = "보호할 폴더";
 "cleanup.protect.add" = "폴더 추가…";
 "cleanup.protect.remove" = "보호 해제";
-"cleanup.protect.note" = "이 폴더와 Mole에 등록된 보호 경로는 매번 정리 대상에서 제외합니다.";
+"cleanup.protect.note" = "이 폴더와 정리 도구에 등록된 보호 경로는 매번 정리 대상에서 제외합니다.";
 "cleanup.close" = "닫기";
 "cleanup.start" = "지금 정리";
 "cleanup.firstStart" = "설정 저장하고 정리";
@@ -212,21 +212,22 @@
 "cleanup.skip.unsupported" = "지원하는 로그 형식이 아님";
 "cleanup.skip.limit" = "탐색 한도 도달·나머지 항목 유지";
 "cleanup.phase.idle" = "정리 준비 완료";
-"cleanup.phase.discovering" = "Mole로 정리 후보 찾는 중…";
+"cleanup.phase.discovering" = "정리 후보 찾는 중…";
 "cleanup.phase.checking" = "후보 크기와 사용 중인 앱 확인 중…";
 "cleanup.phase.cleaning" = "선택한 범위 안에서 정리 중…";
+"cleanup.detail.activity" = "열린 파일과 실행 중인 앱 확인 중";
 "cleanup.phase.refreshing" = "용량 지도 갱신 중…";
 "cleanup.cancelledBefore" = "파일 삭제 전에 정리를 취소했습니다.";
 "cleanup.history.title" = "최근 정리 기록";
 "cleanup.history.bytes" = "%@ 정리";
 "cleanup.history.failed" = "정리는 완료했지만 기록을 저장하지 못했습니다.";
-"cleanup.mole.missing" = "정리 후보를 찾으려면 Mole이 필요합니다.";
-"cleanup.mole.installNote" = "터미널에서 Mole을 설치한 다음 다시 확인하세요. AppleTree는 Mole의 미리보기에 설정한 정리 범위를 적용합니다.";
+"cleanup.mole.missing" = "정리 후보를 찾으려면 정리 도구가 필요합니다.";
+"cleanup.mole.installNote" = "터미널에서 아래 명령으로 정리 도구를 설치한 다음 다시 확인하세요. AppleTree는 도구의 미리보기에 설정한 정리 범위를 적용합니다.";
 "cleanup.mole.copy" = "설치 명령 복사";
 "cleanup.mole.retry" = "다시 확인";
-"cleanup.error.previewFormat" = "Mole 미리보기 형식을 읽을 수 없어 파일을 삭제하지 않았습니다.";
-"cleanup.error.previewRead" = "새 Mole 미리보기 또는 보호 경로를 읽을 수 없어 파일을 삭제하지 않았습니다.";
-"cleanup.error.moleFailed" = "Mole이 후보 탐색을 완료하지 못해 파일을 삭제하지 않았습니다.";
+"cleanup.error.previewFormat" = "정리 후보 목록 형식을 읽을 수 없어 파일을 삭제하지 않았습니다.";
+"cleanup.error.previewRead" = "새 정리 후보 목록 또는 보호 경로를 읽을 수 없어 파일을 삭제하지 않았습니다.";
+"cleanup.error.moleFailed" = "후보 탐색을 완료하지 못해 파일을 삭제하지 않았습니다.";
 "cleanup.error.busy" = "다른 AppleTree 정리 탐색이 진행 중입니다. 완료 후 다시 실행하세요.";
 "cleanup.error.timeout" = "정리 확인 시간이 초과되어 파일을 삭제하지 않았습니다.";
 "cleanup.error.activity" = "사용 중인 파일을 확인할 수 없어 파일을 삭제하지 않았습니다.";

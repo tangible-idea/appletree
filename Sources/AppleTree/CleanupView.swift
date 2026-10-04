@@ -160,6 +160,10 @@ private struct CleanupProgress: View {
                 }
             }
             if cleanup.phase == .cleaning { ProgressView(value: cleanup.progress).tint(Theme.accent) }
+            if !cleanup.detail.isEmpty {
+                Text(cleanup.detail).font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.secondary)
+                    .lineLimit(1).truncationMode(.middle).help(cleanup.detail)
+            }
         }
     }
 }

@@ -93,7 +93,8 @@ public struct SmartCleanup: Sendable {
     }
 
     public func plan(paths: [URL], settings: CleanupSettings, activity: CleanupActivity,
-                     moleProtection: [String] = [], now: Date = Date()) throws -> CleanupPlan {
+                     moleProtection: [String] = [], now: Date = Date(),
+                     progress: (URL) -> Void = { _ in }) throws -> CleanupPlan {
         var files: [CleanupFile] = []
         var measured: [CleanupCategory: Int64] = [:]
         var skipped: [CleanupSkip: Int] = [:]
@@ -130,6 +131,7 @@ public struct SmartCleanup: Sendable {
                 let relative = String(url.path.dropFirst(home.path.count + 1))
                 let isSharedRoot = ["Library/Caches", "Library/Logs", "Library/DiagnosticReports"].contains(relative)
                 guard isSharedRoot || !isBusy(url, activity: activity) else { skipped[.inUse, default: 0] += 1; return }
+                progress(url)
                 do {
                     for child in try manager.contentsOfDirectory(at: url, includingPropertiesForKeys: keys) {
                         if reachedLimit { break }
@@ -167,7 +169,8 @@ public struct SmartCleanup: Sendable {
     }
 
     public func execute(_ plan: CleanupPlan, activity: CleanupActivity, additionalProtection: [String] = [],
-                        progress: @Sendable (Int, Int) -> Void = { _, _ in }) -> CleanupResult {
+                        progress: @Sendable (Int, Int) -> Void = { _, _ in },
+                        current: (URL) -> Void = { _ in }) -> CleanupResult {
         let freeBefore = freeSpace()
         var removed: [CleanupCategory: Int64] = [:]
         var removedFiles = 0
@@ -176,6 +179,7 @@ public struct SmartCleanup: Sendable {
         for (index, file) in plan.files.enumerated() {
             if Task.isCancelled { cancelled = true; break }
             progress(index, plan.files.count)
+            current(file.url)
             if Date().timeIntervalSince(plan.createdAt) > 600 {
                 skipped[.changed, default: 0] += plan.files.count - index; break
             }

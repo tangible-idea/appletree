@@ -18,6 +18,8 @@ final class CleanupStore: ObservableObject {
     @Published private(set) var configured: Bool
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var progress = 0.0
+    /// What the cleanup is currently looking at, so long phases show visible movement.
+    @Published private(set) var detail = ""
     @Published private(set) var result: CleanupResult?
     @Published private(set) var history: [CleanupResult] = []
     @Published private(set) var errorMessage: String?
@@ -79,42 +81,56 @@ final class CleanupStore: ObservableObject {
         historyError = false
         result = nil
         progress = 0
+        detail = ""
         phase = .discovering
         let settings = settings
         task = Task { [weak self] in
             guard let self else { return }
-            defer { phase = .idle; task = nil; deletionTask = nil }
+            defer { phase = .idle; detail = ""; task = nil; deletionTask = nil }
             do {
                 let cleaner = self.cleaner
+                let home = cleaner.home.path
+                let reporter = DetailReporter { [weak self] text in self?.detail = text }
                 let patterns = try MolePreview.protectedPatterns(home: cleaner.home)
-                let paths = try await MolePreview.discover(executable: moleURL, home: cleaner.home)
+                let paths = try await MolePreview.discover(executable: moleURL, home: cleaner.home) { line in
+                    if let text = Self.describe(output: line, home: home) { reporter.send(text) }
+                }
                 try Task.checkCancellation()
+                reporter.flush()
                 phase = .checking
+                detail = L10n.text("cleanup.detail.activity")
                 let activity = try await Self.activity()
                 let planner = Task.detached(priority: .utility) {
-                    try cleaner.plan(paths: paths, settings: settings, activity: activity, moleProtection: patterns)
+                    try cleaner.plan(paths: paths, settings: settings, activity: activity, moleProtection: patterns) { url in
+                        reporter.send(Self.shorten(url.path, home: home))
+                    }
                 }
                 let plan = try await withTaskCancellationHandler { try await planner.value } onCancel: { planner.cancel() }
                 try Task.checkCancellation()
                 // A second snapshot catches apps/files opened while the plan was being measured.
+                reporter.flush()
+                detail = L10n.text("cleanup.detail.activity")
                 let currentActivity = try await Self.activity()
                 let currentProtection = try MolePreview.protectedPatterns(home: cleaner.home)
                 try Task.checkCancellation()
                 phase = .cleaning
+                detail = ""
                 let deletion = Task.detached(priority: .utility) { [weak self] in
-                    cleaner.execute(plan, activity: currentActivity, additionalProtection: currentProtection) { completed, total in
+                    cleaner.execute(plan, activity: currentActivity, additionalProtection: currentProtection, progress: { completed, total in
                         Task { @MainActor in
                             self?.progress = total > 0 ? Double(completed) / Double(total) : 1
                         }
-                    }
+                    }, current: { url in reporter.send(Self.shorten(url.path, home: home)) })
                 }
                 deletionTask = deletion
                 let finished = await withTaskCancellationHandler { await deletion.value } onCancel: { deletion.cancel() }
                 result = finished
                 history.insert(finished, at: 0)
                 history = Array(history.prefix(10))
+                reporter.flush()
                 await saveHistory()
                 phase = .refreshing
+                detail = ""
                 await afterCleanup()
             } catch is CancellationError {
                 errorMessage = L10n.text("cleanup.cancelledBefore")
@@ -144,6 +160,19 @@ final class CleanupStore: ObservableObject {
         }.value
     }
 
+    nonisolated private static func shorten(_ path: String, home: String) -> String {
+        path.hasPrefix(home + "/") ? "~" + path.dropFirst(home.count) : path
+    }
+
+    /// Turns a line of the discovery tool's output into user-facing text, hiding the tool's own branding.
+    nonisolated private static func describe(output line: String, home: String) -> String? {
+        let text = line.replacingOccurrences(of: "\u{1B}\\[[0-9;?]*[A-Za-z]", with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, text.range(of: "mole", options: .caseInsensitive) == nil,
+              !text.hasPrefix("#") else { return nil }
+        return shorten(text.replacingOccurrences(of: home + "/", with: "~/"), home: home)
+    }
+
     private static func activity() async throws -> CleanupActivity {
         let apps = NSWorkspace.shared.runningApplications
         let identifiers = Set(apps.compactMap(\.bundleIdentifier))
@@ -168,5 +197,42 @@ final class CleanupStore: ObservableObject {
             if name == "go" { tools.insert("go") }
         }
         return CleanupActivity(openPaths: paths, appIdentifiers: identifiers, appNames: names, busyTools: tools)
+    }
+}
+
+/// Delivers the latest background status to the main actor at most a few times per second.
+private final class DetailReporter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var pending: String?
+    private var scheduled = false
+    private let apply: @MainActor (String) -> Void
+
+    init(apply: @escaping @MainActor (String) -> Void) { self.apply = apply }
+
+    func send(_ text: String) {
+        lock.lock()
+        pending = text
+        let schedule = !scheduled
+        scheduled = true
+        lock.unlock()
+        guard schedule else { return }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(120))
+            self.deliver()
+        }
+    }
+
+    /// Drops anything still queued so a later phase's text is not overwritten.
+    func flush() {
+        lock.lock(); pending = nil; lock.unlock()
+    }
+
+    @MainActor private func deliver() {
+        lock.lock()
+        let text = pending
+        pending = nil
+        scheduled = false
+        lock.unlock()
+        if let text { apply(text) }
     }
 }
