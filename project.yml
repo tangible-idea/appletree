@@ -1,6 +1,6 @@
 name: AppleTree
 options:
-  bundleIdPrefix: com.appletree
+  bundleIdPrefix: net.tangibleidea.appletree
   deploymentTarget:
     macOS: "14.0"
   defaultConfig: Release
@@ -18,7 +18,7 @@ targets:
           - "Resources/**"
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.appletree.AppleTreeCore
+        PRODUCT_BUNDLE_IDENTIFIER: net.tangibleidea.appletree.core
         DEFINES_MODULE: true
         SKIP_INSTALL: true
   AppleTree:
@@ -33,7 +33,8 @@ targets:
       path: Resources/Info.plist
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.appletree.mac
+        PRODUCT_BUNDLE_IDENTIFIER: net.tangibleidea.appletree
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_ENTITLEMENTS: Resources/AppleTree.entitlements
         INFOPLIST_FILE: Resources/Info.plist
@@ -48,4 +49,4 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: true
-        PRODUCT_BUNDLE_IDENTIFIER: com.appletree.AppleTreeCoreTests
+        PRODUCT_BUNDLE_IDENTIFIER: net.tangibleidea.appletree.tests

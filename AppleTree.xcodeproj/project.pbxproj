@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		DA4CB1E3A2944DD6A871F801 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DA4CB1E3A2944DD6A871F802 /* Assets.xcassets */; };
 		02AA91F9583C3108A8D6186A /* CleanupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F0A91406C1CEE3641F77DA7 /* CleanupView.swift */; };
 		197B0472BB06ACC7C999DA6C /* AppDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 556C444909192737CA80DE1B /* AppDiagnostics.swift */; };
 		1A7CB47302B19F10F5156B6E /* libAppleTreeCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 55F82F42BF7533DD22D9F9AF /* libAppleTreeCore.a */; };
@@ -62,6 +63,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		DA4CB1E3A2944DD6A871F802 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		017F848FE55D8AF613590626 /* ScanIndexCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanIndexCache.swift; sourceTree = "<group>"; };
 		082A38379E79E1BE4F8D8B09 /* SmartCleanup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartCleanup.swift; sourceTree = "<group>"; };
 		0855D1ED21E50D19B04770ED /* Sunburst.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sunburst.swift; sourceTree = "<group>"; };
@@ -170,6 +172,7 @@
 		C20ED9A69775F90C3DCBD7C2 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				DA4CB1E3A2944DD6A871F802 /* Assets.xcassets */,
 				0B5A4D3762CFF128FB858BE4 /* AppleTree.icns */,
 			);
 			path = Resources;
@@ -315,6 +318,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DA4CB1E3A2944DD6A871F801 /* Assets.xcassets in Resources */,
 				81EFC608DECA237C2DAF4459 /* AppleTree.icns in Resources */,
 				8FC8866E5496920EEED715DF /* Localizable.strings in Resources */,
 			);
@@ -436,6 +440,7 @@
 				CODE_SIGN_ENTITLEMENTS = Resources/AppleTree.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = 4CNWGFJJ9M;
 				INFOPLIST_FILE = Resources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -445,7 +450,7 @@
 					"$(inherited)",
 					"-ObjC",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.appletree.mac;
+				PRODUCT_BUNDLE_IDENTIFIER = net.tangibleidea.appletree;
 				SDKROOT = macosx;
 			};
 			name = Release;
@@ -455,6 +460,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				COMBINE_HIDPI_IMAGES = YES;
+				"DEVELOPMENT_TEAM[sdk=macosx*]" = 4CNWGFJJ9M;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -465,7 +471,7 @@
 					"$(inherited)",
 					"-ObjC",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.appletree.AppleTreeCoreTests;
+				PRODUCT_BUNDLE_IDENTIFIER = net.tangibleidea.appletree.tests;
 				SDKROOT = macosx;
 			};
 			name = Debug;
@@ -477,6 +483,7 @@
 				CODE_SIGN_ENTITLEMENTS = Resources/AppleTree.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = 4CNWGFJJ9M;
 				INFOPLIST_FILE = Resources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -486,7 +493,7 @@
 					"$(inherited)",
 					"-ObjC",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.appletree.mac;
+				PRODUCT_BUNDLE_IDENTIFIER = net.tangibleidea.appletree;
 				SDKROOT = macosx;
 			};
 			name = Debug;
@@ -500,7 +507,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.appletree.AppleTreeCore;
+				PRODUCT_BUNDLE_IDENTIFIER = net.tangibleidea.appletree.core;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
 			};
@@ -567,6 +574,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				COMBINE_HIDPI_IMAGES = YES;
+				"DEVELOPMENT_TEAM[sdk=macosx*]" = 4CNWGFJJ9M;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -577,7 +585,7 @@
 					"$(inherited)",
 					"-ObjC",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.appletree.AppleTreeCoreTests;
+				PRODUCT_BUNDLE_IDENTIFIER = net.tangibleidea.appletree.tests;
 				SDKROOT = macosx;
 			};
 			name = Release;
@@ -591,7 +599,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.appletree.AppleTreeCore;
+				PRODUCT_BUNDLE_IDENTIFIER = net.tangibleidea.appletree.core;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
 			};

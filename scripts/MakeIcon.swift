@@ -1,7 +1,12 @@
 import AppKit
 
-let image = NSImage(size: NSSize(width: 1024, height: 1024))
-image.lockFocus()
+// Render at an exact pixel size, independent of the Mac's display scale.
+let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 1024, pixelsHigh: 1024,
+                              bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+                              isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+bitmap.size = NSSize(width: 1024, height: 1024)
+NSGraphicsContext.saveGraphicsState()
+NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmap)
 NSColor.clear.setFill()
 NSRect(x: 0, y: 0, width: 1024, height: 1024).fill()
 let background = NSBezierPath(roundedRect: NSRect(x: 50, y: 50, width: 924, height: 924), xRadius: 210, yRadius: 210)
@@ -30,6 +35,5 @@ for (x, y, radius, color) in [
     color.setFill()
     NSBezierPath(ovalIn: NSRect(x: x - radius, y: y - radius, width: radius * 2, height: radius * 2)).fill()
 }
-image.unlockFocus()
-let bitmap = NSBitmapImageRep(data: image.tiffRepresentation!)!
+NSGraphicsContext.restoreGraphicsState()
 try bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: CommandLine.arguments[1]))

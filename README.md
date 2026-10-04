@@ -73,6 +73,8 @@ swift run AppleTree -AppleLanguages '(ko)' --expect-language ko --smoke-test
 - `Sources/AppleTreeCore`: 메타데이터 분석기, 파일 모델, treemap 알고리즘
 - `Sources/AppleTree`: SwiftUI 화면, 비동기 상태 관리, Finder/휴지통 연동
 - `Sources/AppleTree/Resources/AppleTree.icns`: 개발 실행과 앱 패키지에 공통으로 사용하는 사과나무 아이콘
+- `Sources/AppleTree/Resources/Assets.xcassets/AppIcon.appiconset`: Xcode·App Store용 아이콘. 1024px를 포함한 macOS의 10개 크기를 등록합니다.
+- `scripts/build-icons.sh`: `MakeIcon.swift`의 같은 디자인으로 AppIcon 에셋과 `.icns`를 함께 재생성합니다.
 - `scripts/build-app.sh`: 릴리스 빌드, 공통 아이콘 복사, `.app` 패키징
 
 CLI로 폴더를 지정해 실행할 수도 있습니다: `swift run AppleTree --scan /path/to/folder`.
