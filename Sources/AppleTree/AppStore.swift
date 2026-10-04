@@ -26,6 +26,7 @@ struct OutlineRow: Identifiable {
 
 @MainActor
 final class AppStore: ObservableObject {
+    let cleanup = CleanupStore()
     @Published var root = DemoData.make()
     @Published var navigation: [FileNode] = []
     @Published var selected: FileNode?
@@ -166,7 +167,7 @@ final class AppStore: ObservableObject {
     /// Asks where to save, then zips every current match (not just the rows on screen),
     /// keeping paths relative to the current folder.
     func exportResults() {
-        guard !isDemo, exportProgress == nil, isShowingResults, results.totalCount > 0 else { return }
+        guard !cleanup.isBusy, !isDemo, exportProgress == nil, isShowingResults, results.totalCount > 0 else { return }
         let panel = NSSavePanel()
         panel.title = L10n.text("export.panelTitle")
         panel.message = L10n.format("export.message", results.totalCount.formatted(), SizeText.format(results.totalSize))
@@ -181,6 +182,7 @@ final class AppStore: ObservableObject {
     }
 
     private func startExport(to destination: URL) {
+        guard !cleanup.isBusy else { return }
         let query = searchQuery
         let scope = current
         let indexTask = indexTask
@@ -246,6 +248,7 @@ final class AppStore: ObservableObject {
     }
 
     func chooseFolder() {
+        guard !cleanup.isBusy else { return }
         let panel = NSOpenPanel()
         panel.title = L10n.text("panel.chooseTitle")
         panel.prompt = L10n.text("action.scan")
@@ -260,6 +263,7 @@ final class AppStore: ObservableObject {
     }
 
     func requestScan(_ url: URL, force: Bool = false) {
+        guard !cleanup.isBusy else { return }
         let args = CommandLine.arguments
         let isTesting = args.contains("--smoke-test") || args.contains("--snapshot")
         let path = url.standardizedFileURL.path
@@ -282,6 +286,7 @@ final class AppStore: ObservableObject {
     }
 
     func scan(_ url: URL, force: Bool = false) {
+        guard !cleanup.isBusy || cleanup.phase == .refreshing else { return }
         scanTask?.cancel()
         let id = UUID()
         scanID = id
@@ -405,8 +410,25 @@ final class AppStore: ObservableObject {
     }
 
     func refresh() {
+        guard !cleanup.isBusy else { return }
         guard !isDemo else { chooseFolder(); return }
         scan(root.url, force: true)
+    }
+
+    func refreshAfterCleanup(invalidateCache: Bool = true) async {
+        // Every saved tree can contain paths modified by this Mac-wide cleanup.
+        if invalidateCache { ScanIndexCache.shared.clearAll() }
+        let target = isDemo ? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library") : root.url
+        updateDisk(target)
+        scan(target, force: true)
+        await observationTask?.value
+    }
+
+    func smartClean() {
+        guard !isScanning, exportProgress == nil else { return }
+        cleanup.open()
+        guard cleanup.configured, !cleanup.isBusy else { return }
+        cleanup.start { [weak self] in await self?.refreshAfterCleanup() }
     }
 
     func enter(_ node: FileNode) {
@@ -457,6 +479,7 @@ final class AppStore: ObservableObject {
     }
 
     func moveToTrash() {
+        guard !cleanup.isBusy else { trashCandidate = nil; return }
         guard let node = trashCandidate, !isDemo else { trashCandidate = nil; return }
         trashCandidate = nil
         do {

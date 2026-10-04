@@ -11,19 +11,27 @@ struct AppleTreeApp: App {
         // Diagnostics pin the language through launch arguments instead.
         let isDiagnostic = CommandLine.arguments.contains("--smoke-test") || CommandLine.arguments.contains("--snapshot")
         if !isDiagnostic { LanguagePreference.applyStored() }
-        _store = StateObject(wrappedValue: AppStore())
+        let appStore = AppStore()
+        _store = StateObject(wrappedValue: appStore)
+        #if DEBUG
+        AppDiagnostics.runIfRequested(store: appStore)
+        #endif
     }
 
     var body: some Scene {
         WindowGroup("AppleTree") {
-            ContentView().environmentObject(store)
+            ContentView().environmentObject(store).environmentObject(store.cleanup)
                 // Rebuilding the tree re-reads every string after a language change.
                 .id(appLanguage)
                 .preferredColorScheme(.light)
                 .frame(minWidth: 1100, minHeight: 760)
                 .onAppear {
-                    NSApplication.shared.setActivationPolicy(.regular)
-                    NSApplication.shared.activate(ignoringOtherApps: true)
+                    let isDiagnostic = CommandLine.arguments.contains("--smoke-test") || CommandLine.arguments.contains("--snapshot")
+                    NSApplication.shared.setActivationPolicy(isDiagnostic ? .accessory : .regular)
+                    if !isDiagnostic {
+                        AppIcon.apply()
+                        NSApplication.shared.activate(ignoringOtherApps: true)
+                    }
                     if let index = CommandLine.arguments.firstIndex(of: "--scan"), CommandLine.arguments.count > index + 1 {
                         store.scan(URL(fileURLWithPath: CommandLine.arguments[index + 1]))
                     }
@@ -38,8 +46,10 @@ struct AppleTreeApp: App {
             // Re-evaluated with the stored language so menu titles follow a change too.
             let _ = appLanguage
             CommandGroup(replacing: .newItem) {
-                Button(L10n.text("action.choose")) { store.chooseFolder() }.keyboardShortcut("o")
-                Button(L10n.text("action.refresh")) { store.refresh() }.keyboardShortcut("r").disabled(store.isScanning)
+                Button(L10n.text("action.choose")) { store.chooseFolder() }.keyboardShortcut("o").disabled(store.cleanup.isBusy)
+                Button(L10n.text("action.refresh")) { store.refresh() }.keyboardShortcut("r").disabled(store.isScanning || store.cleanup.isBusy)
+                Button(L10n.text("cleanup.title")) { store.smartClean() }
+                    .disabled(store.isScanning || store.exportProgress != nil)
             }
             CommandMenu(L10n.text("menu.navigate")) {
                 Button(L10n.text("action.parent")) { store.goBack() }.keyboardShortcut("[", modifiers: .command)
@@ -50,7 +60,7 @@ struct AppleTreeApp: App {
         }
 
         Settings {
-            SettingsView().environmentObject(store).id(appLanguage)
+            SettingsView().environmentObject(store).environmentObject(store.cleanup).id(appLanguage)
         }
     }
 }

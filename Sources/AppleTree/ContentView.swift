@@ -3,6 +3,7 @@ import AppleTreeCore
 
 struct ContentView: View {
     @EnvironmentObject private var store: AppStore
+    @EnvironmentObject private var cleanup: CleanupStore
 
     var body: some View {
         HStack(spacing: 0) {
@@ -17,6 +18,7 @@ struct ContentView: View {
                             else if let notice = store.notice { noticeBanner(notice) }
                         }.transition(.opacity.combined(with: .move(edge: .top)))
                         metrics
+                        if cleanup.isBusy || cleanup.result != nil { CleanupSummaryCard() }
                         if store.showMap {
                             MapPanel().transition(.opacity.combined(with: .move(edge: .top)))
                         }
@@ -41,6 +43,7 @@ struct ContentView: View {
         .sheet(isPresented: $store.showFDAPrompt) {
             FDAPromptView()
         }
+        .sheet(isPresented: $cleanup.showSheet) { CleanupSheet() }
     }
 
     private var toolbar: some View {
@@ -64,10 +67,14 @@ struct ContentView: View {
                     .padding(.horizontal, 9).padding(.vertical, 5)
                     .background(Theme.accent.opacity(0.08), in: Capsule())
             }
-            IconButton(symbol: "arrow.clockwise", help: L10n.text("action.refreshHelp"), disabled: store.isScanning) { store.refresh() }
+            Button { store.smartClean() } label: {
+                Label(L10n.text("cleanup.title"), systemImage: "sparkles")
+            }.buttonStyle(QuietButtonStyle())
+                .disabled(store.isScanning || store.exportProgress != nil)
+            IconButton(symbol: "arrow.clockwise", help: L10n.text("action.refreshHelp"), disabled: store.isScanning || cleanup.isBusy) { store.refresh() }
             Button { store.chooseFolder() } label: {
                 Label(L10n.text("action.scan"), systemImage: "folder.badge.plus")
-            }.buttonStyle(AccentButtonStyle()).keyboardShortcut("o", modifiers: .command)
+            }.buttonStyle(AccentButtonStyle()).keyboardShortcut("o", modifiers: .command).disabled(cleanup.isBusy)
         }
         .padding(.horizontal, 25).frame(height: 66)
         .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }

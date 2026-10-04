@@ -8,7 +8,7 @@ let package = Package(
     products: [.executable(name: "AppleTree", targets: ["AppleTree"])],
     targets: [
         .target(name: "AppleTreeCore", resources: [.process("Resources")]),
-        .executableTarget(name: "AppleTree", dependencies: ["AppleTreeCore"]),
+        .executableTarget(name: "AppleTree", dependencies: ["AppleTreeCore"], resources: [.copy("Resources/AppleTree.icns")]),
         .testTarget(name: "AppleTreeCoreTests", dependencies: ["AppleTreeCore"])
     ]
 )

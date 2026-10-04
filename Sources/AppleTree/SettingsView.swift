@@ -50,9 +50,12 @@ struct SettingsView: View {
             Toggle(L10n.text("settings.dates.show"), isOn: $showModificationDates)
             Text(L10n.text("settings.dates.note"))
                 .font(.system(size: 11)).foregroundStyle(.secondary)
+            Divider().padding(.vertical, 10)
+            Text(L10n.text("cleanup.scope.title")).font(.headline)
+            CleanupOptions()
         }
         .padding(24)
-        .frame(width: 420)
+        .frame(width: 560)
         .navigationTitle(L10n.text("settings.title"))
     }
 }
