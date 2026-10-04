@@ -16,6 +16,7 @@ enum AppDiagnostics {
         Task { @MainActor in
             do {
                 try await Task.sleep(for: .seconds(1))
+                try require(NSApplication.shared.activationPolicy() == .accessory, "Diagnostics must not add a Dock icon")
                 var diagnosticWindow: NSWindow?
                 // Direct CLI launches can restore a session without an initial WindowGroup window.
                 if !NSApplication.shared.windows.contains(where: { $0.isVisible }) {

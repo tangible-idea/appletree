@@ -11,6 +11,8 @@ open dist/AppleTree.app
 
 생성된 `dist/AppleTree.app`을 응용 프로그램 폴더로 복사해서 사용할 수 있습니다. Xcode 16 이상과 Swift 6 도구가 필요합니다. 개발 중에는 `swift run AppleTree` 또는 Xcode에서 `Package.swift`를 열어 실행하세요.
 
+개발 실행과 앱 패키지는 같은 사과나무 아이콘을 사용합니다. `--smoke-test`와 `--snapshot` 검증 실행은 Dock에 별도 아이콘을 추가하지 않습니다.
+
 ## 사용
 
 앱은 실행할 때 macOS의 선호 언어 순서에 따라 **한국어 또는 영어**를 자동 선택합니다. 지원되는 언어가 없으면 영어를 사용합니다. macOS의 시스템 설정 → 일반 → 언어 및 지역 → 응용 프로그램에서 AppleTree의 언어만 따로 지정할 수도 있습니다. 언어 설정을 바꾼 뒤 앱을 다시 실행하면 적용됩니다. 실제 파일명과 폴더명은 원래 이름을 유지합니다.
@@ -70,6 +72,7 @@ swift run AppleTree -AppleLanguages '(ko)' --expect-language ko --smoke-test
 
 - `Sources/AppleTreeCore`: 메타데이터 분석기, 파일 모델, treemap 알고리즘
 - `Sources/AppleTree`: SwiftUI 화면, 비동기 상태 관리, Finder/휴지통 연동
-- `scripts/build-app.sh`: 릴리스 빌드, 아이콘 생성, `.app` 패키징
+- `Sources/AppleTree/Resources/AppleTree.icns`: 개발 실행과 앱 패키지에 공통으로 사용하는 사과나무 아이콘
+- `scripts/build-app.sh`: 릴리스 빌드, 공통 아이콘 복사, `.app` 패키징
 
 CLI로 폴더를 지정해 실행할 수도 있습니다: `swift run AppleTree --scan /path/to/folder`.
