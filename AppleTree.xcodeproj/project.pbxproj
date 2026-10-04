@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		DA4CB1E3A2944DD6A871F801 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DA4CB1E3A2944DD6A871F802 /* Assets.xcassets */; };
 		02AA91F9583C3108A8D6186A /* CleanupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F0A91406C1CEE3641F77DA7 /* CleanupView.swift */; };
 		197B0472BB06ACC7C999DA6C /* AppDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 556C444909192737CA80DE1B /* AppDiagnostics.swift */; };
 		1A7CB47302B19F10F5156B6E /* libAppleTreeCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 55F82F42BF7533DD22D9F9AF /* libAppleTreeCore.a */; };
@@ -35,6 +34,7 @@
 		A9565AEAB022552D9C627D5F /* FileListPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29D1E3D0376AE717203C7876 /* FileListPanel.swift */; };
 		BE30C2A72FD302D32BD0DBD8 /* CleanupStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D6F755C716BE28A33B31D61 /* CleanupStore.swift */; };
 		CA3C678C84A615DE9AAE57EA /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4764D8C3877C9A7C4C70604D /* AppStore.swift */; };
+		DA4CB1E3A2944DD6A871F801 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DA4CB1E3A2944DD6A871F802 /* Assets.xcassets */; };
 		DB22AC9BD5C2EB1FF2C3CC75 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8BEBC7600E4F987AAF38A32 /* ContentView.swift */; };
 		E769911F289A28D9FAC3242E /* L10n.swift in Sources */ = {isa = PBXBuildFile; fileRef = 936ACEF2C37199295F8ED577 /* L10n.swift */; };
 		EE554B541955C05361B31EC8 /* SearchIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BCC0B6E46CAB6B0B60638AF /* SearchIndex.swift */; };
@@ -63,7 +63,6 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		DA4CB1E3A2944DD6A871F802 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		017F848FE55D8AF613590626 /* ScanIndexCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanIndexCache.swift; sourceTree = "<group>"; };
 		082A38379E79E1BE4F8D8B09 /* SmartCleanup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartCleanup.swift; sourceTree = "<group>"; };
 		0855D1ED21E50D19B04770ED /* Sunburst.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sunburst.swift; sourceTree = "<group>"; };
@@ -96,6 +95,7 @@
 		C74B5B24C582021AD99E28C3 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		C850E97977AACD2696DC67AE /* SunburstView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SunburstView.swift; sourceTree = "<group>"; };
 		D3C8740524C873B67014C352 /* DemoData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoData.swift; sourceTree = "<group>"; };
+		DA4CB1E3A2944DD6A871F802 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		DFB963E9B7573AF226A6CA1B /* Sidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sidebar.swift; sourceTree = "<group>"; };
 		EF7A272B7F2F48DB0BF628DB /* AppleTreeCoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AppleTreeCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		F0E29BC27C5B9D170C8D5284 /* AppIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIcon.swift; sourceTree = "<group>"; };
@@ -442,6 +442,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = 4CNWGFJJ9M;
 				INFOPLIST_FILE = Resources/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -460,7 +461,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				COMBINE_HIDPI_IMAGES = YES;
-				"DEVELOPMENT_TEAM[sdk=macosx*]" = 4CNWGFJJ9M;
+				DEVELOPMENT_TEAM = 4CNWGFJJ9M;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -485,6 +486,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = 4CNWGFJJ9M;
 				INFOPLIST_FILE = Resources/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -574,7 +576,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				COMBINE_HIDPI_IMAGES = YES;
-				"DEVELOPMENT_TEAM[sdk=macosx*]" = 4CNWGFJJ9M;
+				DEVELOPMENT_TEAM = 4CNWGFJJ9M;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
