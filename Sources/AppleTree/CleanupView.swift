@@ -59,7 +59,6 @@ struct CleanupSheet: View {
     @EnvironmentObject private var store: AppStore
     @EnvironmentObject private var cleanup: CleanupStore
     @State private var optionsExpanded = false
-    @State private var selectedHistory: CleanupResult?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -95,7 +94,7 @@ struct CleanupSheet: View {
                     if let error = cleanup.errorMessage {
                         Label(error, systemImage: "info.circle").font(.system(size: 12)).foregroundStyle(Theme.accent)
                     }
-                    if let result = selectedHistory ?? cleanup.result {
+                    if let result = cleanup.selectedHistory ?? cleanup.result {
                         CleanupResultView(result: result)
                     }
                     if cleanup.historyError {
@@ -108,7 +107,7 @@ struct CleanupSheet: View {
                         DisclosureGroup(L10n.text("cleanup.history.title")) {
                             VStack(spacing: 10) {
                                 ForEach(cleanup.history) { record in
-                                    Button { selectedHistory = record } label: {
+                                    Button { cleanup.selectedHistory = record } label: {
                                         HStack {
                                             Text(record.date.formatted(date: .abbreviated, time: .shortened))
                                             Spacer()
@@ -129,8 +128,8 @@ struct CleanupSheet: View {
                 if cleanup.canCancel {
                     Button(L10n.text("action.cancel")) { cleanup.cancel() }.buttonStyle(QuietButtonStyle())
                 }
-                Button(L10n.text(cleanup.configured ? "cleanup.start" : "cleanup.firstStart")) {
-                    selectedHistory = nil
+                Button(cleanup.isBusy ? cleanup.phase.buttonTitle : L10n.text(cleanup.configured ? "cleanup.start" : "cleanup.firstStart")) {
+                    cleanup.selectedHistory = nil
                     optionsExpanded = false
                     cleanup.start { await store.refreshAfterCleanup() }
                 }
@@ -141,8 +140,79 @@ struct CleanupSheet: View {
         .frame(width: 680, height: 680)
         .foregroundStyle(Theme.ink).background(Theme.background)
         .preferredColorScheme(.light)
-        .onAppear { optionsExpanded = !cleanup.configured }
+        .onAppear { optionsExpanded = !cleanup.configured && cleanup.selectedHistory == nil }
         .interactiveDismissDisabled(cleanup.isBusy)
+    }
+}
+
+/// Toolbar control: the cleanup action on the left, recent cleanup history on the right.
+struct CleanupSplitButton: View {
+    @EnvironmentObject private var store: AppStore
+    @EnvironmentObject private var cleanup: CleanupStore
+    @State private var showHistory = false
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Button { store.smartClean() } label: {
+                Label(L10n.text("cleanup.title"), systemImage: "sparkles")
+                    .padding(.horizontal, 13).padding(.vertical, 9).contentShape(Rectangle())
+            }
+            .disabled(store.isScanning || store.exportProgress != nil)
+            Rectangle().fill(Theme.line).frame(width: 1, height: 20)
+            Button { showHistory.toggle() } label: {
+                Image(systemName: "clock.arrow.circlepath")
+                    .padding(.horizontal, 10).padding(.vertical, 9).contentShape(Rectangle())
+            }
+            .help(L10n.text("cleanup.history.title"))
+            .popover(isPresented: $showHistory, arrowEdge: .bottom) { history }
+        }
+        .buttonStyle(SegmentButtonStyle())
+        .foregroundStyle(Theme.ink)
+        .background(.white, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.line, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var history: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(L10n.text("cleanup.history.title")).font(.system(size: 13, weight: .semibold))
+                .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 8)
+            if cleanup.history.isEmpty {
+                Text(L10n.text("cleanup.history.empty")).font(.system(size: 12)).foregroundStyle(Theme.secondary)
+                    .padding(.horizontal, 16).padding(.bottom, 16)
+            } else {
+                ForEach(cleanup.history) { record in
+                    Button {
+                        showHistory = false
+                        cleanup.open(history: record)
+                    } label: {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(record.date.formatted(date: .abbreviated, time: .shortened)).font(.system(size: 12))
+                                Text(L10n.count(.files, record.removedFiles)).font(.system(size: 10)).foregroundStyle(Theme.secondary)
+                            }
+                            Spacer()
+                            Text(SizeText.format(record.removedBytes)).font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundStyle(record.cancelled ? Theme.secondary : Theme.accent)
+                            Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(Theme.secondary)
+                        }
+                        .padding(.horizontal, 16).padding(.vertical, 8).contentShape(Rectangle())
+                    }.buttonStyle(.plain)
+                }
+                .padding(.bottom, 8)
+            }
+        }
+        .frame(width: 280)
+        .foregroundStyle(Theme.ink).background(Theme.background)
+    }
+}
+
+private struct SegmentButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(configuration.isPressed ? Theme.line : .clear)
+            .opacity(isEnabled ? 1 : 0.45)
     }
 }
 

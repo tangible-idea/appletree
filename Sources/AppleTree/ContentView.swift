@@ -67,10 +67,7 @@ struct ContentView: View {
                     .padding(.horizontal, 9).padding(.vertical, 5)
                     .background(Theme.accent.opacity(0.08), in: Capsule())
             }
-            Button { store.smartClean() } label: {
-                Label(L10n.text("cleanup.title"), systemImage: "sparkles")
-            }.buttonStyle(QuietButtonStyle())
-                .disabled(store.isScanning || store.exportProgress != nil)
+            CleanupSplitButton()
             IconButton(symbol: "arrow.clockwise", help: L10n.text("action.refreshHelp"), disabled: store.isScanning || cleanup.isBusy) { store.refresh() }
             Button { store.chooseFolder() } label: {
                 Label(L10n.text("action.scan"), systemImage: "folder.badge.plus")

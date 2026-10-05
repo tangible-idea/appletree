@@ -58,6 +58,7 @@ struct QuietButtonStyle: ButtonStyle {
             .background(configuration.isPressed ? Theme.line : .white, in: RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.line, lineWidth: 1))
             .contentShape(RoundedRectangle(cornerRadius: 8))
+            .modifier(DisabledDimming())
     }
 }
 
@@ -66,7 +67,14 @@ struct AccentButtonStyle: ButtonStyle {
         configuration.label.font(.system(size: 12, weight: .semibold))
             .foregroundStyle(.white).padding(.horizontal, 15).padding(.vertical, 10)
             .background(Theme.accent.opacity(configuration.isPressed ? 0.8 : 1), in: RoundedRectangle(cornerRadius: 8))
+            .modifier(DisabledDimming())
     }
+}
+
+/// Custom button styles don't dim themselves, so disabled buttons would otherwise look clickable.
+private struct DisabledDimming: ViewModifier {
+    @Environment(\.isEnabled) private var isEnabled
+    func body(content: Content) -> some View { content.opacity(isEnabled ? 1 : 0.45) }
 }
 
 struct IconButton: View {

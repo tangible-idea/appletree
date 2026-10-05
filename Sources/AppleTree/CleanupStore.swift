@@ -7,9 +7,20 @@ final class CleanupStore: ObservableObject {
     enum Phase: String {
         case idle, discovering, checking, cleaning, refreshing
         var title: String { L10n.text("cleanup.phase.\(rawValue)") }
+        /// Short label for the start button while this phase runs.
+        var buttonTitle: String {
+            switch self {
+            case .idle: return L10n.text("cleanup.start")
+            case .discovering, .checking: return L10n.text("cleanup.button.checking")
+            case .cleaning: return L10n.text("cleanup.button.cleaning")
+            case .refreshing: return L10n.text("cleanup.button.refreshing")
+            }
+        }
     }
 
     @Published var showSheet = false
+    /// A past run picked from the history list; the sheet shows it instead of the latest result.
+    @Published var selectedHistory: CleanupResult?
     @Published var settings: CleanupSettings {
         didSet {
             if let data = try? JSONEncoder().encode(settings) { defaults.set(data, forKey: Self.settingsKey) }
@@ -52,7 +63,8 @@ final class CleanupStore: ObservableObject {
         }
     }
 
-    func open() {
+    func open(history record: CleanupResult? = nil) {
+        selectedHistory = record
         moleURL = MolePreview.locate()
         errorMessage = nil
         showSheet = true

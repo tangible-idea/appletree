@@ -149,6 +149,7 @@
 "settings.language" = "Language";
 "settings.language.system" = "Match Mac (%@)";
 "settings.language.note" = "Applies right away to every AppleTree window.";
+"settings.section.display" = "Display";
 "settings.dates.show" = "Show modification dates in file lists";
 "settings.dates.note" = "Show the Modified column in By folder and Largest files. Changes apply immediately and are remembered next time.";
 "list.modified" = "Modified";
@@ -190,6 +191,9 @@
 "cleanup.protect.note" = "These folders and the cleanup tool’s protected paths are excluded from every cleanup.";
 "cleanup.close" = "Close";
 "cleanup.start" = "Clean now";
+"cleanup.button.checking" = "Checking…";
+"cleanup.button.cleaning" = "Cleaning…";
+"cleanup.button.refreshing" = "Finishing…";
 "cleanup.firstStart" = "Save scope and clean";
 "cleanup.details" = "View details";
 "cleanup.done" = "Cleanup complete";
@@ -219,6 +223,7 @@
 "cleanup.phase.refreshing" = "Updating your space map…";
 "cleanup.cancelledBefore" = "Cleanup cancelled before deletion.";
 "cleanup.history.title" = "Recent cleanups";
+"cleanup.history.empty" = "No cleanups yet.";
 "cleanup.history.bytes" = "%@ removed";
 "cleanup.history.failed" = "Cleanup finished, but its history could not be saved.";
 "cleanup.mole.missing" = "A cleanup tool is needed to find cleanup candidates.";

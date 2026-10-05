@@ -150,6 +150,7 @@
 "settings.language.system" = "Mac 설정 따르기 (%@)";
 "settings.language.note" = "모든 AppleTree 창에 바로 적용돼요.";
 "sidebar.settings" = "설정";
+"settings.section.display" = "표시";
 "settings.dates.show" = "파일 목록에 수정일 표시";
 "settings.dates.note" = "폴더별 보기와 큰 파일 목록에 수정일 열을 표시합니다. 변경 사항은 즉시 적용되며 다음 실행에도 유지됩니다.";
 "list.modified" = "수정일";
@@ -190,6 +191,9 @@
 "cleanup.protect.note" = "이 폴더와 정리 도구에 등록된 보호 경로는 매번 정리 대상에서 제외합니다.";
 "cleanup.close" = "닫기";
 "cleanup.start" = "지금 정리";
+"cleanup.button.checking" = "검사 중…";
+"cleanup.button.cleaning" = "정리 중…";
+"cleanup.button.refreshing" = "마무리 중…";
 "cleanup.firstStart" = "설정 저장하고 정리";
 "cleanup.details" = "정리 내역 보기";
 "cleanup.done" = "정리 완료";
@@ -219,6 +223,7 @@
 "cleanup.phase.refreshing" = "용량 지도 갱신 중…";
 "cleanup.cancelledBefore" = "파일 삭제 전에 정리를 취소했습니다.";
 "cleanup.history.title" = "최근 정리 기록";
+"cleanup.history.empty" = "아직 정리 기록이 없습니다.";
 "cleanup.history.bytes" = "%@ 정리";
 "cleanup.history.failed" = "정리는 완료했지만 기록을 저장하지 못했습니다.";
 "cleanup.mole.missing" = "정리 후보를 찾으려면 정리 도구가 필요합니다.";
