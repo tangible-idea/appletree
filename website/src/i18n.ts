@@ -42,7 +42,7 @@ const en: Copy = {
   download: {
     label: "Download for Mac",
     requirements: ["macOS 14 or later", "Apple Silicon"],
-    unknownSize: "zip",
+    unknownSize: "dmg",
   },
   features: {
     eyebrow: "Features",
@@ -88,8 +88,8 @@ const en: Copy = {
     eyebrow: "Install",
     title: "Download, then drag to Applications",
     steps: [
-      { title: "Download the zip and open it.", body: "Double-click AppleTree.zip in Downloads to get the AppleTree app." },
-      { title: "Move AppleTree to Applications.", body: "Drag it into the Applications folder in Finder." },
+      { title: "Download the dmg and open it.", body: "Double-click AppleTree.dmg in Downloads. A window opens with AppleTree and an Applications folder." },
+      { title: "Drag AppleTree onto Applications.", body: "Then eject the AppleTree disk in Finder. You can delete the dmg afterward." },
       { title: "Allow it the first time you open it.", body: "AppleTree isn't notarized by Apple yet, so macOS warns on first launch. Go to System Settings → Privacy & Security and click Open Anyway." },
       { title: "Turn on Full Disk Access if you need it.", body: "To include protected folders, enable AppleTree in System Settings → Privacy & Security → Full Disk Access, then reopen the app." },
     ],
@@ -113,7 +113,7 @@ const ko: Copy = {
   download: {
     label: "Mac용 다운로드",
     requirements: ["macOS 14 이상", "Apple Silicon"],
-    unknownSize: "zip",
+    unknownSize: "dmg",
   },
   features: {
     eyebrow: "기능",
@@ -159,8 +159,8 @@ const ko: Copy = {
     eyebrow: "설치",
     title: "내려받아서 응용 프로그램 폴더로",
     steps: [
-      { title: "zip 파일을 내려받아 압축을 풉니다.", body: "다운로드 폴더에서 AppleTree.zip을 더블 클릭하면 AppleTree 앱이 나옵니다." },
-      { title: "AppleTree를 응용 프로그램 폴더로 옮깁니다.", body: "Finder에서 끌어다 놓으면 됩니다." },
+      { title: "dmg 파일을 내려받아 엽니다.", body: "다운로드 폴더에서 AppleTree.dmg를 더블 클릭하면 AppleTree와 응용 프로그램 폴더가 있는 창이 열립니다." },
+      { title: "AppleTree를 응용 프로그램 폴더로 끌어다 놓습니다.", body: "복사가 끝나면 Finder에서 AppleTree 디스크를 추출하세요. dmg 파일은 지워도 됩니다." },
       { title: "처음 열 때 한 번 허용합니다.", body: "아직 Apple 공증을 받지 않은 앱이라 첫 실행 때 경고가 뜹니다. 시스템 설정 → 개인정보 보호 및 보안에서 아래쪽의 ‘그래도 열기’를 누르세요." },
       { title: "필요하면 전체 디스크 접근을 켭니다.", body: "보호된 폴더까지 분석하려면 시스템 설정 → 개인정보 보호 및 보안 → 전체 디스크 접근 권한에서 AppleTree를 켜고 앱을 다시 실행합니다." },
     ],

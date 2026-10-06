@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { copy, type Lang } from "./i18n";
 
-const DOWNLOAD_URL: string = import.meta.env.VITE_DOWNLOAD_URL || "downloads/AppleTree.zip";
+const DOWNLOAD_URL: string = import.meta.env.VITE_DOWNLOAD_URL || "downloads/AppleTree.dmg";
 const LANG_KEY = "appletree-site-lang";
 
 type Release = { version: string; bytes: number };
@@ -38,7 +38,7 @@ export default function App() {
   }, [lang, t.htmlLang]);
 
   useEffect(() => {
-    // Written by `npm run package-app`; missing when the zip is hosted elsewhere.
+    // Written by `npm run package-app`; missing when the dmg is hosted elsewhere.
     fetch("downloads/release.json")
       .then((response) => (response.ok ? response.json() : null))
       .then((data) => setRelease(data && typeof data.bytes === "number" ? data : null))
@@ -46,7 +46,7 @@ export default function App() {
   }, []);
 
   const meta = [
-    ...(release ? [`v${release.version}`, `${formatSize(release.bytes)} · zip`] : []),
+    ...(release ? [`v${release.version}`, `${formatSize(release.bytes)} · dmg`] : []),
     ...t.download.requirements,
   ];
 
@@ -198,7 +198,7 @@ function SectionHead({ eyebrow, title, intro }: { eyebrow: string; title: string
 
 function DownloadButton({ label }: { label: string }) {
   return (
-    <a className="btn" href={DOWNLOAD_URL} download="AppleTree.zip">
+    <a className="btn" href={DOWNLOAD_URL} download="AppleTree.dmg">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M12 4v11" />
         <path d="m7 10 5 5 5-5" />
