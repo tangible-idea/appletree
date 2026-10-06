@@ -1,6 +1,6 @@
 {
   // "name" must match the Worker's name in the Cloudflare dashboard.
-  "name": "appletree-website",
+  "name": "appletree",
   "compatibility_date": "2026-10-01",
   "assets": {
     "directory": "./dist",
