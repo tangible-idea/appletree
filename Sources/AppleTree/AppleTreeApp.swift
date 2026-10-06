@@ -4,6 +4,7 @@ import AppleTreeCore
 
 @main
 struct AppleTreeApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var store: AppStore
     @AppStorage(LanguagePreference.key) private var appLanguage = LanguagePreference.system
 
@@ -26,6 +27,7 @@ struct AppleTreeApp: App {
                 .preferredColorScheme(.light)
                 .frame(minWidth: 1100, minHeight: 760)
                 .onAppear {
+                    appDelegate.store = store
                     let isDiagnostic = CommandLine.arguments.contains("--smoke-test") || CommandLine.arguments.contains("--snapshot")
                     NSApplication.shared.setActivationPolicy(isDiagnostic ? .accessory : .regular)
                     if !isDiagnostic {
@@ -61,6 +63,30 @@ struct AppleTreeApp: App {
 
         Settings {
             SettingsView().environmentObject(store).environmentObject(store.cleanup).id(appLanguage)
+        }
+    }
+}
+
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    weak var store: AppStore?
+
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // AppKit ignores a quit request while a window has a sheet attached, so System Settings'
+        // "Quit & Reopen" after granting Full Disk Access did nothing. Close sheets, then quit.
+        NSAppleEventManager.shared().setEventHandler(self, andSelector: #selector(handleQuit(_:withReply:)),
+                                                     forEventClass: AEEventClass(kCoreEventClass),
+                                                     andEventID: AEEventID(kAEQuitApplication))
+    }
+
+    @objc private func handleQuit(_ event: NSAppleEventDescriptor, withReply reply: NSAppleEventDescriptor) {
+        store?.dismissPresentations()
+        Task { @MainActor in
+            // Sheets detach after their closing animation; quitting before that is ignored again.
+            for _ in 0..<30 where NSApplication.shared.windows.contains(where: { $0.attachedSheet != nil }) {
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            NSApplication.shared.terminate(nil)
         }
     }
 }

@@ -277,6 +277,14 @@ final class AppStore: ObservableObject {
         scan(url, force: force)
     }
 
+    /// Closes every sheet and dialog so a quit request isn't ignored.
+    func dismissPresentations() {
+        showFDAPrompt = false
+        cleanup.showSheet = false
+        errorMessage = nil
+        trashCandidate = nil
+    }
+
     func confirmFDAScan() {
         showFDAPrompt = false
         if let url = pendingScanURL {

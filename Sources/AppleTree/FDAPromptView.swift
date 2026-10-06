@@ -62,6 +62,10 @@ struct FDAPromptView: View {
         .padding(26)
         .frame(width: 460)
         .background(.white)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            // Coming back from System Settings: continue once access works without a relaunch.
+            if FullDiskAccess.isGranted { store.confirmFDAScan() }
+        }
     }
 
     private func stepRow(number: String, text: String) -> some View {
