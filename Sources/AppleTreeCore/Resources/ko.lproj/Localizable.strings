@@ -236,3 +236,23 @@
 "cleanup.error.busy" = "다른 AppleTree 정리 탐색이 진행 중입니다. 완료 후 다시 실행하세요.";
 "cleanup.error.timeout" = "정리 확인 시간이 초과되어 파일을 삭제하지 않았습니다.";
 "cleanup.error.activity" = "사용 중인 파일을 확인할 수 없어 파일을 삭제하지 않았습니다.";
+
+"tree.menu.show" = "바탕화면에 사과나무 보이기";
+"tree.hint" = "파일을 나무에 놓으면 둘 곳을 찾아 드려요.";
+"tree.hide" = "나무 숨기기";
+"tree.thinking" = "어울리는 자리를 찾는 중…";
+"tree.question" = "“%@” 어디에 둘까요?";
+"tree.noGoodFit" = "딱 맞는 폴더는 없어 보여요.";
+"tree.onlyFirst" = "첫 번째 항목만 정리했어요. 나머지는 하나씩 놓아 주세요.";
+"tree.notNow" = "나중에";
+"tree.moved" = "%@ 폴더로 옮겼어요";
+"tree.undo" = "되돌리기";
+"tree.reveal" = "Finder에서 보기";
+"tree.error.noKey" = "이 AppleTree에는 TypeSafe API 키가 없어 폴더를 추천할 수 없어요.";
+"tree.error.unauthorized" = "TypeSafe가 API 키를 받아들이지 않았어요.";
+"tree.error.network" = "TypeSafe에 연결하지 못했어요. 네트워크를 확인하고 다시 시도해 주세요.";
+"tree.error.noFolders" = "추천할 폴더를 찾지 못했어요.";
+"tree.error.move" = "파일을 옮기지 못했어요: %@";
+"tree.error.undo" = "파일을 원래 자리로 돌려놓지 못했어요: %@";
+"settings.tree.title" = "사과나무";
+"settings.tree.note" = "파일을 나무에 놓으면 보관할 폴더를 추천해 줍니다. 추천을 위해 파일 이름, 종류, 크기, 날짜와 함께 폴더 이름과 폴더마다 항목 이름 몇 개가 TypeSafe로 전송됩니다. 파일 내용은 보내지 않습니다.";

@@ -2,4 +2,4 @@
 .swiftpm/
 dist/
 .DS_Store
-
+.typesafe-api-key

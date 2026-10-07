@@ -25,6 +25,13 @@ sed -e 's/$(DEVELOPMENT_LANGUAGE)/en/' \
     -c 'Add :NSHighResolutionCapable bool true' \
     -c 'Add :NSPrincipalClass string NSApplication' \
     "$PLIST"
+# The TypeSafe key for the desktop tree's folder suggestions. It is readable by anyone who has the app.
+TYPESAFE_KEY="${TYPESAFE_API_KEY:-$(cat "$PROJECT_DIR/.typesafe-api-key" 2>/dev/null || true)}"
+if [ -n "$TYPESAFE_KEY" ]; then
+    /usr/libexec/PlistBuddy -c "Add :TypeSafeAPIKey string $TYPESAFE_KEY" "$PLIST"
+else
+    echo "warning: no TypeSafe API key (set TYPESAFE_API_KEY or create .typesafe-api-key); folder suggestions are off." >&2
+fi
 if grep -q '\$(' "$PLIST"; then
     echo "Unresolved build variable in Info.plist:" >&2
     grep '\$(' "$PLIST" >&2

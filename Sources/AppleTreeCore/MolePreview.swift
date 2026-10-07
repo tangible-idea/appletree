@@ -171,6 +171,9 @@ public enum CleanupCommand {
         }
         for pid in descendants where pid != parent { kill(pid, SIGKILL) }
         kill(parent, SIGKILL)
-        process.waitUntilExit()
+        // waitUntilExit could block forever on a busy cooperative thread; SIGKILL can't be ignored,
+        // so a short bounded wait for Foundation to notice the exit is enough.
+        let deadline = Date().addingTimeInterval(2)
+        while process.isRunning, Date() < deadline { usleep(10_000) }
     }
 }

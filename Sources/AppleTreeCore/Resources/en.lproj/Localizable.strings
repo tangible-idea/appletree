@@ -236,3 +236,23 @@
 "cleanup.error.busy" = "Another AppleTree cleanup preview is running. Try again when it finishes.";
 "cleanup.error.timeout" = "The cleanup check timed out. Nothing was deleted.";
 "cleanup.error.activity" = "Could not verify which files are in use. Nothing was deleted.";
+
+"tree.menu.show" = "Show Apple Tree on Desktop";
+"tree.hint" = "Drop a file on the tree to find it a home.";
+"tree.hide" = "Hide the tree";
+"tree.thinking" = "Finding a good spot…";
+"tree.question" = "Where should “%@” go?";
+"tree.noGoodFit" = "None of your folders looks like a clear fit.";
+"tree.onlyFirst" = "Only the first item was sorted. Drop the others one at a time.";
+"tree.notNow" = "Not now";
+"tree.moved" = "Moved to %@";
+"tree.undo" = "Undo";
+"tree.reveal" = "Show in Finder";
+"tree.error.noKey" = "This copy of AppleTree has no TypeSafe API key, so it can't suggest folders.";
+"tree.error.unauthorized" = "TypeSafe didn't accept the API key.";
+"tree.error.network" = "Couldn't reach TypeSafe. Check your connection and try again.";
+"tree.error.noFolders" = "Couldn't find any folders to suggest.";
+"tree.error.move" = "Couldn't move the file: %@";
+"tree.error.undo" = "Couldn't put the file back: %@";
+"settings.tree.title" = "Apple Tree";
+"settings.tree.note" = "Drop a file on the tree and it suggests a folder to keep it in. To make the suggestion, the file's name, type, size and dates, along with your folder names and a few item names from each, are sent to TypeSafe. File contents are never sent.";
