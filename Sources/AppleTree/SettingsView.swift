@@ -58,7 +58,7 @@ struct SettingsView: View {
                     .toggleStyle(.switch).controlSize(.small)
                     .padding(.horizontal, 14).padding(.vertical, 11)
                 }
-                SettingsSection(symbol: "leaf", title: L10n.text("settings.tree.title"),
+                SettingsSection(symbol: "pawprint", title: L10n.text("settings.tree.title"),
                                 note: L10n.text("settings.tree.note")) {
                     Toggle(isOn: $showDesktopTree) {
                         Text(L10n.text("tree.menu.show")).font(.system(size: 13))

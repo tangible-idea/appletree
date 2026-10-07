@@ -131,7 +131,7 @@ final class DesktopTreeController {
     }
 
     private func makePanel() -> NSPanel {
-        let panel = TreePanel(contentRect: NSRect(x: 0, y: 0, width: 300, height: 560),
+        let panel = TreePanel(contentRect: NSRect(x: 0, y: 0, width: 280, height: 440),
                               styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -167,10 +167,10 @@ struct DesktopTreeView: View {
         VStack(spacing: 10) {
             ZStack(alignment: .topTrailing) {
                 ZStack {
-                    AppleTreeDrawing(mood: mood, fallenApples: fallenApples)
+                    HedgehogDrawing(mood: mood, fallenApples: fallenApples)
                     flyingIcon
                 }
-                .frame(width: 240, height: 280)
+                .frame(width: HedgehogDrawing.size.width, height: HedgehogDrawing.size.height)
                 .contentShape(Rectangle())
                 .dropDestination(for: URL.self) { urls, _ in
                     model.drop(urls)
@@ -186,15 +186,15 @@ struct DesktopTreeView: View {
                     .buttonStyle(.plain).help(L10n.text("tree.hide")).padding(6)
                 }
             }
-            panel.frame(width: 280)
+            panel.frame(width: 264)
             Spacer(minLength: 0)
         }
-        .frame(width: 300, height: 560, alignment: .top)
+        .frame(width: 280, height: 440, alignment: .top)
         .onHover { isHovering = $0 }
         .id(appLanguage)
     }
 
-    private var mood: AppleTreeDrawing.Mood {
+    private var mood: HedgehogDrawing.Mood {
         if isTargeted { return .welcoming }
         if case .thinking = model.phase { return .thinking }
         return .resting
@@ -210,10 +210,10 @@ struct DesktopTreeView: View {
 
     @ViewBuilder private var flyingIcon: some View {
         if let icon = model.flyingIcon {
-            Image(nsImage: icon).resizable().frame(width: 56, height: 56)
+            Image(nsImage: icon).resizable().frame(width: 34, height: 34)
                 .scaleEffect(1 - 0.85 * model.flyProgress)
                 .opacity(1 - model.flyProgress * 0.9)
-                .offset(y: 110 - 190 * model.flyProgress)
+                .offset(x: -10, y: -28 + 30 * model.flyProgress)
                 .allowsHitTesting(false)
         }
     }
@@ -357,95 +357,194 @@ struct AppleView: View {
     }
 }
 
-/// The tree itself: a trunk, a swaying canopy and its apples. The first `fallenApples` apples drop to the ground.
-struct AppleTreeDrawing: View {
+/// A tiny, round hedgehog facing the viewer with apples on its back.
+/// The first `fallenApples` apples drop to the ground beside it.
+struct HedgehogDrawing: View {
     enum Mood { case resting, welcoming, thinking }
     let mood: Mood
     let fallenApples: Int
 
-    // Canopy blobs and apples, in a 240 × 280 space.
-    private static let blobs: [(x: CGFloat, y: CGFloat, r: CGFloat, hex: UInt32)] = [
-        (120, 78, 62, 0x6E9460), (72, 112, 50, 0x5F8653), (168, 112, 52, 0x5F8653), (96, 70, 46, 0x7FA36A),
-        (150, 68, 48, 0x7FA36A), (120, 120, 56, 0x6E9460), (82, 138, 38, 0x7FA36A), (160, 140, 40, 0x7FA36A),
-        (120, 52, 38, 0x8DB07A), (100, 98, 34, 0x8DB07A), (145, 100, 32, 0x8DB07A),
-    ]
-    private static let apples: [CGPoint] = [
-        CGPoint(x: 96, y: 118), CGPoint(x: 146, y: 92), CGPoint(x: 122, y: 148),
-        CGPoint(x: 74, y: 84), CGPoint(x: 172, y: 128), CGPoint(x: 118, y: 62),
-    ]
-    private static let groundY: CGFloat = 252
+    static let size = CGSize(width: 120, height: 92)
+    private static let center = CGPoint(x: 50, y: 50)
+    private static let radius = 27.0
+    private static let groundY: CGFloat = 84
+    private static let apples: [CGPoint] = [CGPoint(x: 37, y: 19), CGPoint(x: 51, y: 13), CGPoint(x: 64, y: 20)]
+    private static let fallenX: [CGFloat] = [92, 104, 81]
+    private static let coat = Color(hex: 0xB08562)
+    private static let coatShade = Color(hex: 0x926B4C)
+    private static let spike = Color(hex: 0x7A573E)
+    private static let cream = Color(hex: 0xFCEBD5)
+    private static let ink = Color(hex: 0x3B2C25)
+    private static let blush = Color(hex: 0xF4A3A0)
 
     var body: some View {
         TimelineView(.animation) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
             ZStack {
-                Ellipse().fill(.black.opacity(0.13)).frame(width: 150, height: 18).position(x: 120, y: 262)
-                Trunk().fill(LinearGradient(colors: [Color(hex: 0x9A6A47), Color(hex: 0x7A5034)],
-                                            startPoint: .leading, endPoint: .trailing))
-                ZStack {
-                    ForEach(Self.blobs.indices, id: \.self) { index in
-                        let blob = Self.blobs[index]
-                        Circle().fill(Color(hex: blob.hex))
-                            .frame(width: blob.r * 2, height: blob.r * 2)
-                            .position(x: blob.x + rustle(t, index), y: blob.y)
-                    }
-                    ForEach(Self.apples.indices, id: \.self) { index in
-                        if index >= fallenApples {
-                            AppleView(size: 18)
-                                .scaleEffect(glow(t, index))
-                                .position(Self.apples[index])
-                        }
-                    }
+                Ellipse().fill(.black.opacity(0.12)).frame(width: 50, height: 7)
+                    .position(x: Self.center.x + (mood == .thinking ? roll(t) : 0), y: Self.groundY)
+                if mood == .thinking {
+                    ball(t).transition(.scale(scale: 0.85).combined(with: .opacity))
+                } else {
+                    sitting(t).transition(.scale(scale: 0.85, anchor: .bottom).combined(with: .opacity))
                 }
-                .brightness(mood == .welcoming ? 0.06 : 0)
-                .scaleEffect(mood == .welcoming ? 1.05 : 1, anchor: .bottom)
-                .rotationEffect(.degrees(sway(t)), anchor: UnitPoint(x: 0.5, y: 0.85))
-                // Fallen apples rest on the ground, outside the swaying canopy.
                 ForEach(0..<min(fallenApples, Self.apples.count), id: \.self) { index in
-                    AppleView(size: 18)
-                        .position(x: [82, 160, 121][index % 3] + CGFloat(index / 3) * 12, y: Self.groundY)
-                        .transition(.asymmetric(insertion: .offset(y: Self.apples[index].y - Self.groundY).combined(with: .opacity),
+                    AppleView(size: 11)
+                        .position(x: Self.fallenX[index], y: Self.groundY - 4)
+                        .transition(.asymmetric(insertion: .offset(x: Self.apples[index].x - Self.fallenX[index],
+                                                                   y: Self.apples[index].y - Self.groundY + 4)
+                                                    .combined(with: .opacity),
                                                 removal: .opacity))
                 }
             }
-            .frame(width: 240, height: 280)
-            .animation(.spring(response: 0.35, dampingFraction: 0.6), value: mood)
-            .animation(.interpolatingSpring(stiffness: 140, damping: 9), value: fallenApples)
+            .frame(width: Self.size.width, height: Self.size.height)
+            .animation(.spring(response: 0.4, dampingFraction: 0.65), value: mood)
+            .animation(.interpolatingSpring(stiffness: 150, damping: 10), value: fallenApples)
         }
     }
 
-    private func sway(_ t: TimeInterval) -> Double {
-        switch mood {
-        case .resting: 1.2 * sin(t * 0.9)
-        case .welcoming: 2.5 * sin(t * 2.2)
-        case .thinking: 1.2 * sin(t * 1.4) + 0.8 * sin(t * 9)
+    // MARK: Sitting
+
+    private func sitting(_ t: TimeInterval) -> some View {
+        let breathe = 1 + 0.03 * sin(t * 2)
+        let hop = mood == .welcoming ? -5 * abs(sin(t * 8)) : 0
+        let wobble = mood == .welcoming ? 0 : 2.5 * sin(t * 1.1)
+        return ZStack {
+            Canvas { context, _ in
+                drawCoat(&context, center: Self.center, puff: mood == .welcoming ? 1.12 : 1)
+                drawFace(&context, t: t)
+            }
+            ForEach(Self.apples.indices, id: \.self) { index in
+                if index >= fallenApples {
+                    AppleView(size: 12).rotationEffect(.degrees([-14, 0, 14][index])).position(Self.apples[index])
+                }
+            }
+        }
+        .frame(width: Self.size.width, height: Self.size.height)
+        .scaleEffect(x: 1 / breathe.squareRoot(), y: breathe, anchor: UnitPoint(x: 0.42, y: Self.groundY / Self.size.height))
+        .rotationEffect(.degrees(wobble), anchor: UnitPoint(x: 0.42, y: Self.groundY / Self.size.height))
+        .offset(y: hop)
+    }
+
+    /// A soft, scalloped coat: a ring of round bumps instead of sharp spines.
+    private func drawCoat(_ context: inout GraphicsContext, center: CGPoint, puff: Double) {
+        let r = Self.radius
+        // Short, soft spikes poking out around the back so it reads as a hedgehog, not a bear.
+        let spikes = 18
+        for i in 0...spikes {
+            let a = .pi * (0.92 + 1.16 * Double(i) / Double(spikes))
+            let length = (i % 2 == 0 ? 13.0 : 10.0) * puff
+            let tip = CGPoint(x: center.x + (r + length) * cos(a), y: center.y + (r + length) * sin(a))
+            var spike = Path()
+            spike.move(to: CGPoint(x: center.x + (r - 2) * cos(a - 0.2), y: center.y + (r - 2) * sin(a - 0.2)))
+            spike.addQuadCurve(to: tip, control: CGPoint(x: center.x + (r + length * 0.6) * cos(a - 0.08),
+                                                          y: center.y + (r + length * 0.6) * sin(a - 0.08)))
+            spike.addQuadCurve(to: CGPoint(x: center.x + (r - 2) * cos(a + 0.2), y: center.y + (r - 2) * sin(a + 0.2)),
+                               control: CGPoint(x: center.x + (r + length * 0.6) * cos(a + 0.08),
+                                                y: center.y + (r + length * 0.6) * sin(a + 0.08)))
+            spike.closeSubpath()
+            context.fill(spike, with: .color(Self.spike))
+        }
+        for (ring, color) in [(r * 0.98 * puff, Self.coatShade), (r * 0.9, Self.coat)] {
+            let bumps = 13
+            var coat = Path(ellipseIn: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2))
+            for i in 0..<bumps {
+                let a = Double(i) / Double(bumps) * 2 * .pi + (color == Self.coat ? .pi / Double(bumps) : 0)
+                let p = CGPoint(x: center.x + ring * cos(a), y: center.y + ring * sin(a))
+                let bump = r * 0.36
+                coat.addEllipse(in: CGRect(x: p.x - bump, y: p.y - bump, width: bump * 2, height: bump * 2))
+            }
+            context.fill(coat, with: .color(color))
+        }
+        // A few quill strokes on the coat.
+        for (dx, dy) in [(-14.0, -16.0), (0, -20), (14, -16), (-21, -4), (21, -4)] {
+            var quill = Path()
+            quill.move(to: CGPoint(x: center.x + dx - 2.5, y: center.y + dy + 2))
+            quill.addLine(to: CGPoint(x: center.x + dx, y: center.y + dy - 2))
+            quill.addLine(to: CGPoint(x: center.x + dx + 2.5, y: center.y + dy + 2))
+            context.stroke(quill, with: .color(Self.coatShade), style: StrokeStyle(lineWidth: 1.3, lineCap: .round, lineJoin: .round))
+        }
+        // Little feet peeking out underneath.
+        for x in [-9.0, 9] {
+            context.fill(Path(ellipseIn: CGRect(x: center.x + x - 5, y: Self.groundY - 7, width: 10, height: 6)),
+                         with: .color(Color(hex: 0xE9C9A6)))
         }
     }
 
-    private func rustle(_ t: TimeInterval, _ index: Int) -> CGFloat {
-        mood == .thinking ? CGFloat(1.6 * sin(t * 11 + Double(index))) : 0
+    private func drawFace(_ context: inout GraphicsContext, t: TimeInterval) {
+        let c = Self.center
+        // Ears
+        for x in [-17.0, 17] {
+            context.fill(Path(ellipseIn: CGRect(x: c.x + x - 3.5, y: c.y - 11, width: 7, height: 7)), with: .color(Self.cream))
+            context.fill(Path(ellipseIn: CGRect(x: c.x + x - 1.75, y: c.y - 9.25, width: 3.5, height: 3.5)), with: .color(Self.blush))
+        }
+        // Face: wide and low, so the eyes sit low like a baby's.
+        context.fill(Path(ellipseIn: CGRect(x: c.x - 20, y: c.y - 11, width: 40, height: 33)), with: .color(Self.cream))
+        // Cheeks
+        let blushAlpha = mood == .welcoming ? 0.85 : 0.6
+        for x in [-13.5, 13.5] {
+            context.fill(Path(ellipseIn: CGRect(x: c.x + x - 4.5, y: c.y + 7, width: 9, height: 5.5)),
+                         with: .color(Self.blush.opacity(blushAlpha)))
+        }
+        // Eyes: big and glossy, blinking now and then.
+        let blinking = mood == .resting && t.truncatingRemainder(dividingBy: 3.8) < 0.13
+        for x in [-8.5, 8.5] {
+            let eye = CGPoint(x: c.x + x, y: c.y + 2)
+            if blinking {
+                var lid = Path()
+                lid.move(to: CGPoint(x: eye.x - 3.5, y: eye.y))
+                lid.addQuadCurve(to: CGPoint(x: eye.x + 3.5, y: eye.y), control: CGPoint(x: eye.x, y: eye.y + 3))
+                context.stroke(lid, with: .color(Self.ink), style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
+            } else {
+                let w = mood == .welcoming ? 8.0 : 6.6, h = mood == .welcoming ? 9.0 : 7.6
+                context.fill(Path(ellipseIn: CGRect(x: eye.x - w / 2, y: eye.y - h / 2, width: w, height: h)), with: .color(Self.ink))
+                context.fill(Path(ellipseIn: CGRect(x: eye.x - w * 0.05, y: eye.y - h * 0.4, width: w * 0.42, height: w * 0.42)),
+                             with: .color(.white))
+                context.fill(Path(ellipseIn: CGRect(x: eye.x - w * 0.3, y: eye.y + h * 0.12, width: w * 0.2, height: w * 0.2)),
+                             with: .color(.white.opacity(0.8)))
+            }
+        }
+        // Button nose and a tiny smile
+        let sniff = 0.5 * sin(t * 10) * max(0, sin(t * 0.7))
+        context.fill(Path(ellipseIn: CGRect(x: c.x - 3, y: c.y + 6 + sniff, width: 6, height: 4.4)), with: .color(Self.ink))
+        var mouth = Path()
+        mouth.move(to: CGPoint(x: c.x - 3, y: c.y + 12))
+        mouth.addQuadCurve(to: CGPoint(x: c.x, y: c.y + 12), control: CGPoint(x: c.x - 1.5, y: c.y + 14))
+        mouth.addQuadCurve(to: CGPoint(x: c.x + 3, y: c.y + 12), control: CGPoint(x: c.x + 1.5, y: c.y + 14))
+        context.stroke(mouth, with: .color(Self.ink.opacity(0.75)), style: StrokeStyle(lineWidth: 1.1, lineCap: .round))
     }
 
-    /// While thinking, apples swell one after another.
-    private func glow(_ t: TimeInterval, _ index: Int) -> CGFloat {
-        guard mood == .thinking else { return 1 }
-        return 1 + 0.3 * CGFloat(max(0, sin(t * 4 - Double(index) * 0.9)))
-    }
-}
+    // MARK: Curled up and rolling
 
-private struct Trunk: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: 104, y: 262))
-        path.addCurve(to: CGPoint(x: 112, y: 150), control1: CGPoint(x: 114, y: 230), control2: CGPoint(x: 110, y: 180))
-        path.addCurve(to: CGPoint(x: 86, y: 120), control1: CGPoint(x: 104, y: 136), control2: CGPoint(x: 94, y: 128))
-        path.addLine(to: CGPoint(x: 94, y: 114))
-        path.addCurve(to: CGPoint(x: 120, y: 140), control1: CGPoint(x: 104, y: 122), control2: CGPoint(x: 114, y: 130))
-        path.addCurve(to: CGPoint(x: 150, y: 112), control1: CGPoint(x: 128, y: 128), control2: CGPoint(x: 140, y: 118))
-        path.addLine(to: CGPoint(x: 156, y: 118))
-        path.addCurve(to: CGPoint(x: 130, y: 152), control1: CGPoint(x: 144, y: 128), control2: CGPoint(x: 134, y: 140))
-        path.addCurve(to: CGPoint(x: 138, y: 262), control1: CGPoint(x: 128, y: 190), control2: CGPoint(x: 128, y: 230))
-        path.closeSubpath()
-        return path
+    private func roll(_ t: TimeInterval) -> CGFloat { 13 * sin(t * 3) }
+
+    private func ball(_ t: TimeInterval) -> some View {
+        let x = roll(t)
+        let ballRadius = 22.0
+        let center = CGPoint(x: Self.center.x, y: Self.groundY - ballRadius - 3)
+        return Canvas { context, _ in
+            var coat = context
+            let r = ballRadius
+            for (ring, color, offset) in [(r * 0.98, Self.coatShade, 0.0), (r * 0.86, Self.coat, Double.pi / 11)] {
+                var path = Path(ellipseIn: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2))
+                for i in 0..<11 {
+                    let a = Double(i) / 11 * 2 * .pi + offset
+                    let p = CGPoint(x: center.x + ring * cos(a), y: center.y + ring * sin(a))
+                    path.addEllipse(in: CGRect(x: p.x - r * 0.38, y: p.y - r * 0.38, width: r * 0.76, height: r * 0.76))
+                }
+                coat.fill(path, with: .color(color))
+            }
+            // The tucked-in face peeks out, eyes squeezed shut.
+            coat.fill(Path(ellipseIn: CGRect(x: center.x - 4, y: center.y + 4, width: 20, height: 14)), with: .color(Self.cream))
+            coat.fill(Path(ellipseIn: CGRect(x: center.x + 11, y: center.y + 9, width: 5, height: 4)), with: .color(Self.ink))
+            var eye = Path()
+            eye.move(to: CGPoint(x: center.x + 1, y: center.y + 9))
+            eye.addLine(to: CGPoint(x: center.x + 4, y: center.y + 10.5))
+            eye.addLine(to: CGPoint(x: center.x + 1, y: center.y + 12))
+            coat.stroke(eye, with: .color(Self.ink), style: StrokeStyle(lineWidth: 1.2, lineCap: .round, lineJoin: .round))
+        }
+        .frame(width: Self.size.width, height: Self.size.height)
+        .rotationEffect(.radians(Double(x) / ballRadius), anchor: UnitPoint(x: center.x / Self.size.width, y: center.y / Self.size.height))
+        .offset(x: x)
     }
 }

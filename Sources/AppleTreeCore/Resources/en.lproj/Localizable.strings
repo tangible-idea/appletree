@@ -237,9 +237,9 @@
 "cleanup.error.timeout" = "The cleanup check timed out. Nothing was deleted.";
 "cleanup.error.activity" = "Could not verify which files are in use. Nothing was deleted.";
 
-"tree.menu.show" = "Show Apple Tree on Desktop";
-"tree.hint" = "Drop a file on the tree to find it a home.";
-"tree.hide" = "Hide the tree";
+"tree.menu.show" = "Show Hedgehog on Desktop";
+"tree.hint" = "Drop a file on the hedgehog to find it a home.";
+"tree.hide" = "Hide the hedgehog";
 "tree.thinking" = "Finding a good spot…";
 "tree.question" = "Where should “%@” go?";
 "tree.noGoodFit" = "None of your folders looks like a clear fit.";
@@ -254,5 +254,5 @@
 "tree.error.noFolders" = "Couldn't find any folders to suggest.";
 "tree.error.move" = "Couldn't move the file: %@";
 "tree.error.undo" = "Couldn't put the file back: %@";
-"settings.tree.title" = "Apple Tree";
-"settings.tree.note" = "Drop a file on the tree and it suggests a folder to keep it in. To make the suggestion, the file's name, type, size and dates, along with your folder names and a few item names from each, are sent to TypeSafe. File contents are never sent.";
+"settings.tree.title" = "Hedgehog";
+"settings.tree.note" = "Drop a file on the hedgehog and it suggests a folder to keep it in. To make the suggestion, the file's name, type, size and dates, along with your folder names and a few item names from each, are sent to TypeSafe. File contents are never sent.";
