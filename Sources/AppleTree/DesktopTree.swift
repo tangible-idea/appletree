@@ -124,6 +124,13 @@ final class DesktopTreeController {
         if visible { show() } else { panel?.orderOut(nil); model.dismiss() }
     }
 
+    /// Files shared from another app. The hedgehog appears for them even when it is hidden,
+    /// and goes away again once they are handled.
+    func organize(_ urls: [URL]) {
+        show()
+        model.drop(urls)
+    }
+
     private func show() {
         let panel = self.panel ?? makePanel()
         self.panel = panel
@@ -147,7 +154,9 @@ final class DesktopTreeController {
         panel.setFrameAutosaveName("AppleTreeDesktopTree")
         // Suggestions float above other windows so they aren't hidden; the resting tree stays on the desktop.
         model.onPhaseChange = { [weak panel, desktopLevel] phase in
-            if case .idle = phase { panel?.level = desktopLevel } else { panel?.level = .floating }
+            guard case .idle = phase else { panel?.level = .floating; return }
+            panel?.level = desktopLevel
+            if !DesktopTreePreference.isOn { panel?.orderOut(nil) }
         }
         return panel
     }

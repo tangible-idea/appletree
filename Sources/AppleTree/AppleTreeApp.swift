@@ -43,6 +43,8 @@ struct AppleTreeApp: App {
                     #endif
                 }
         }
+        // Share menu URLs go to the hedgehog (AppDelegate), not into a new window.
+        .handlesExternalEvents(matching: [])
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1320, height: 920)
         .commands {
@@ -80,6 +82,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         let isDiagnostic = CommandLine.arguments.contains("--smoke-test") || CommandLine.arguments.contains("--snapshot")
         if !isDiagnostic && DesktopTreePreference.isOn { DesktopTreeController.shared.setVisible(true) }
+    }
+
+    /// `appletree://organize?path=…`, sent by the Share menu extension: the hedgehog suggests a folder.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        let files = urls.filter { $0.scheme == "appletree" && $0.host == "organize" }.flatMap { url in
+            (URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? [])
+                .filter { $0.name == "path" }.compactMap(\.value).map { URL(fileURLWithPath: $0) }
+        }
+        if !files.isEmpty { DesktopTreeController.shared.organize(files) }
     }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
