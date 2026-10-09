@@ -21,7 +21,6 @@ sed -e 's/$(DEVELOPMENT_LANGUAGE)/en/' \
     -c 'Add :CFBundleLocalizations:0 string en' \
     -c 'Add :CFBundleLocalizations:1 string ko' \
     -c 'Add :LSMinimumSystemVersion string 14.0' \
-    -c 'Add :LSApplicationCategoryType string public.app-category.utilities' \
     -c 'Add :NSHighResolutionCapable bool true' \
     -c 'Add :NSPrincipalClass string NSApplication' \
     "$PLIST"
