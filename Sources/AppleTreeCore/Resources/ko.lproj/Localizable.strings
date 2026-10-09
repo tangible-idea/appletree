@@ -38,7 +38,7 @@
 "metric.files" = "전체 파일";
 "metric.largest" = "가장 큰 폴더";
 "metric.noFolders" = "하위 폴더 없음";
-"footer.privacy" = "파일은 Mac 안에만. 외부 전송 없이 분석합니다.";
+"footer.privacy" = "분석은 Mac 안에서만 하고, 파일 내용은 외부로 보내지 않습니다.";
 "footer.basis" = "파일 크기 기준 · 숨김 파일 포함";
 "sidebar.workspace" = "WORKSPACE";
 "sidebar.overview" = "공간 둘러보기";

@@ -181,7 +181,7 @@ export default function App() {
         </div>
       </main>
 
-      <footer>{t.footer}</footer>
+      <footer>{t.footer} · <a href={lang === "ko" ? "privacy.html#ko" : "privacy.html"}>{t.privacyLink}</a></footer>
     </div>
   );
 }

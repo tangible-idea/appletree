@@ -26,6 +26,7 @@ export interface Copy {
   install: { eyebrow: string; title: string; steps: Item[]; note: string };
   final: string;
   footer: string;
+  privacyLink: string;
 }
 
 const en: Copy = {
@@ -80,7 +81,7 @@ const en: Copy = {
     note: "Cleaned files are deleted directly, not moved to Trash. Apps rebuild caches when they need them, so an app may open a little slower the first time afterwards. If the helper tool used to find cleanup candidates isn't installed, AppleTree shows how to install it.",
   },
   privacy: [
-    { title: "Nothing leaves your Mac", body: "All analysis happens locally. No account and no internet connection needed." },
+    { title: "Scans stay on your Mac", body: "All analysis happens locally, with no account. Only the hedgehog's folder suggestions go online, and they send file and folder names, never contents." },
     { title: "Contents stay unread", body: "AppleTree looks at size, date and type only. It never opens your documents or photos." },
     { title: "English and Korean", body: "Follows your Mac's language, or pick one in AppleTree's settings." },
   ],
@@ -97,6 +98,7 @@ const en: Copy = {
   },
   final: "Start with your own Mac.",
   footer: "AppleTree · Room to breathe.",
+  privacyLink: "Privacy Policy",
 };
 
 const ko: Copy = {
@@ -151,7 +153,7 @@ const ko: Copy = {
     note: "정리 대상 파일은 휴지통을 거치지 않고 바로 지웁니다. 캐시는 앱이 필요할 때 다시 만들기 때문에, 처음 한 번은 앱이 조금 느리게 열릴 수 있습니다. 정리 후보를 찾을 때 쓰는 보조 도구가 없으면 앱이 설치 방법을 안내합니다.",
   },
   privacy: [
-    { title: "서버로 보내지 않습니다", body: "모든 분석은 내 Mac 안에서 끝납니다. 계정도, 인터넷 연결도 필요 없습니다." },
+    { title: "분석은 Mac 안에서", body: "모든 분석은 내 Mac 안에서 끝나고 계정도 필요 없습니다. 고슴도치의 폴더 추천만 인터넷을 쓰며, 파일과 폴더 이름만 보내고 내용은 보내지 않습니다." },
     { title: "파일 내용을 읽지 않습니다", body: "크기, 날짜, 종류 같은 정보만 봅니다. 문서나 사진의 내용은 열어보지 않습니다." },
     { title: "한국어와 영어", body: "Mac의 언어 설정을 따르고, 앱 설정에서 언어를 따로 바꿀 수도 있습니다." },
   ],
@@ -168,6 +170,7 @@ const ko: Copy = {
   },
   final: "내 Mac부터 살펴보세요.",
   footer: "AppleTree · 조금 더 가벼운 Mac.",
+  privacyLink: "개인정보 처리방침",
 };
 
 export const copy: Record<Lang, Copy> = { en, ko };

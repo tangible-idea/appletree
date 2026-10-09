@@ -38,7 +38,7 @@
 "metric.files" = "Total files";
 "metric.largest" = "Largest folder";
 "metric.noFolders" = "No subfolders";
-"footer.privacy" = "Your files stay on your Mac. Nothing is uploaded.";
+"footer.privacy" = "Scans run on your Mac. File contents are never uploaded.";
 "footer.basis" = "Logical file sizes · Hidden files included";
 "sidebar.workspace" = "WORKSPACE";
 "sidebar.overview" = "Space overview";
