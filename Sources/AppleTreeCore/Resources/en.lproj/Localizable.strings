@@ -243,8 +243,9 @@
 "tree.thinking" = "Finding a good spot…";
 "tree.question" = "Where should “%@” go?";
 "tree.noGoodFit" = "None of your folders looks like a clear fit.";
-"tree.onlyFirst" = "Only the first item was sorted. Drop the others one at a time.";
+"tree.waiting" = "%@ more waiting.";
 "tree.notNow" = "Not now";
+"tree.stopAll" = "Stop";
 "tree.moved" = "Moved to %@";
 "tree.undo" = "Undo";
 "tree.reveal" = "Show in Finder";

@@ -243,8 +243,9 @@
 "tree.thinking" = "어울리는 자리를 찾는 중…";
 "tree.question" = "“%@” 어디에 둘까요?";
 "tree.noGoodFit" = "딱 맞는 폴더는 없어 보여요.";
-"tree.onlyFirst" = "첫 번째 항목만 정리했어요. 나머지는 하나씩 놓아 주세요.";
+"tree.waiting" = "다음 파일 %@개가 기다리고 있어요.";
 "tree.notNow" = "나중에";
+"tree.stopAll" = "그만하기";
 "tree.moved" = "%@ 폴더로 옮겼어요";
 "tree.undo" = "되돌리기";
 "tree.reveal" = "Finder에서 보기";

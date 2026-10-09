@@ -8,18 +8,20 @@ enum DesktopTreePreference {
     static var isOn: Bool { UserDefaults.standard.object(forKey: key) as? Bool ?? defaultValue }
 }
 
-/// What the tree is doing with the most recently dropped file.
+/// What the tree is doing with the dropped files. Several files are handled one at a time.
 @MainActor
 final class DesktopTreeModel: ObservableObject {
     enum Phase {
         case idle
         case thinking(DroppedFile)
-        case suggestions(DroppedFile, [FolderSuggestion], noMatch: Double, skipped: Int)
+        case suggestions(DroppedFile, [FolderSuggestion], noMatch: Double)
         case moved(original: URL, current: URL, folder: String)
         case failed(String)
     }
 
     @Published private(set) var phase: Phase = .idle
+    /// Files dropped or shared after the current one, in order.
+    @Published private(set) var waiting: [URL] = []
     /// The dropped file's icon while it flies up into the canopy.
     @Published private(set) var flyingIcon: NSImage?
     @Published private(set) var flyProgress = 0.0
@@ -27,17 +29,33 @@ final class DesktopTreeModel: ObservableObject {
     private var resetTask: Task<Void, Never>?
     private var requestTask: Task<Void, Never>?
 
-    var isBusy: Bool { if case .thinking = phase { true } else { false } }
-
     func drop(_ urls: [URL]) {
-        guard !isBusy, let url = urls.first?.standardizedFileURL else { return }
+        let current: URL? = switch phase {
+        case .thinking(let file), .suggestions(let file, _, _): file.url
+        default: nil
+        }
+        for url in urls.map(\.standardizedFileURL) where url != current && !waiting.contains(url) {
+            waiting.append(url)
+        }
+        // A file that was just moved keeps its undo button until its timer moves on.
+        if case .idle = phase { next() } else if case .failed = phase { next() }
+    }
+
+    /// Moves on to the next waiting file, or rests when there is none.
+    func next() {
         resetTask?.cancel()
+        requestTask?.cancel()
+        guard !waiting.isEmpty else {
+            flyingIcon = nil
+            set(.idle)
+            return
+        }
+        let url = waiting.removeFirst()
         let file = DroppedFile(url: url)
         flyingIcon = NSWorkspace.shared.icon(forFile: url.path)
         flyProgress = 0
         withAnimation(.easeIn(duration: 0.7)) { flyProgress = 1 }
         set(.thinking(file))
-        let skipped = urls.count - 1
         requestTask = Task { [weak self] in
             let started = ContinuousClock.now
             let outcome = await Self.suggest(for: file)
@@ -49,8 +67,10 @@ final class DesktopTreeModel: ObservableObject {
             case .success(let result) where result.ranked.isEmpty:
                 set(.failed(L10n.text("tree.noGoodFit")))
             case .success(let result):
-                set(.suggestions(file, result.ranked, noMatch: result.noMatch, skipped: skipped))
+                set(.suggestions(file, result.ranked, noMatch: result.noMatch))
             case .failure(let message):
+                // A missing key or the network would fail every waiting file the same way.
+                waiting.removeAll()
                 set(.failed(message))
             }
         }
@@ -60,10 +80,12 @@ final class DesktopTreeModel: ObservableObject {
         do {
             let current = try FileMover.move(file.url, into: suggestion.folder.url)
             set(.moved(original: file.url, current: current, folder: suggestion.folder.name))
+            // Shorter when more files wait, but long enough to catch a wrong move.
+            let pause: Duration = waiting.isEmpty ? .seconds(8) : .seconds(3)
             resetTask = Task { [weak self] in
-                try? await Task.sleep(for: .seconds(8))
+                try? await Task.sleep(for: pause)
                 guard !Task.isCancelled else { return }
-                self?.dismiss()
+                self?.next()
             }
         } catch {
             set(.failed(L10n.format("tree.error.move", error.localizedDescription)))
@@ -74,17 +96,16 @@ final class DesktopTreeModel: ObservableObject {
         resetTask?.cancel()
         do {
             try FileMover.undo(movedTo: current, originalLocation: original)
-            dismiss()
+            next()
         } catch {
             set(.failed(L10n.format("tree.error.undo", error.localizedDescription)))
         }
     }
 
+    /// Stops sorting, leaving the current and waiting files where they are.
     func dismiss() {
-        resetTask?.cancel()
-        requestTask?.cancel()
-        flyingIcon = nil
-        set(.idle)
+        waiting.removeAll()
+        next()
     }
 
     private func set(_ phase: Phase) {
@@ -211,7 +232,7 @@ struct DesktopTreeView: View {
 
     private var fallenApples: Int {
         switch model.phase {
-        case .suggestions(_, let ranked, _, _): ranked.count
+        case .suggestions(_, let ranked, _): ranked.count
         case .moved: 1
         default: 0
         }
@@ -246,8 +267,8 @@ struct DesktopTreeView: View {
                 }
             }
             .transition(.opacity)
-        case .suggestions(let file, let ranked, let noMatch, let skipped):
-            SuggestionList(file: file, ranked: ranked, noMatch: noMatch, skipped: skipped)
+        case .suggestions(let file, let ranked, let noMatch):
+            SuggestionList(file: file, ranked: ranked, noMatch: noMatch)
                 .transition(.move(edge: .top).combined(with: .opacity))
         case .moved(let original, let current, let folder):
             Bubble {
@@ -267,7 +288,7 @@ struct DesktopTreeView: View {
             Bubble {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(message).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true)
-                    Button(L10n.text("action.ok")) { model.dismiss() }.buttonStyle(QuietButtonStyle()).font(.system(size: 11))
+                    Button(L10n.text("action.ok")) { model.next() }.buttonStyle(QuietButtonStyle()).font(.system(size: 11))
                 }
             }
             .transition(.opacity)
@@ -280,7 +301,6 @@ private struct SuggestionList: View {
     let file: DroppedFile
     let ranked: [FolderSuggestion]
     let noMatch: Double
-    let skipped: Int
     @State private var shown = 0
 
     var body: some View {
@@ -298,11 +318,17 @@ private struct SuggestionList: View {
                 if noMatch > (ranked.first?.probability ?? 0) {
                     Text(L10n.text("tree.noGoodFit")).font(.system(size: 10)).foregroundStyle(Theme.secondary)
                 }
-                if skipped > 0 {
-                    Text(L10n.text("tree.onlyFirst")).font(.system(size: 10)).foregroundStyle(Theme.secondary)
+                if !model.waiting.isEmpty {
+                    Text(L10n.format("tree.waiting", model.waiting.count.formatted()))
+                        .font(.system(size: 10)).foregroundStyle(Theme.secondary)
                 }
-                Button(L10n.text("tree.notNow")) { model.dismiss() }
-                    .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(Theme.secondary)
+                HStack(spacing: 14) {
+                    Button(L10n.text("tree.notNow")) { model.next() }
+                    if !model.waiting.isEmpty {
+                        Button(L10n.text("tree.stopAll")) { model.dismiss() }
+                    }
+                }
+                .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(Theme.secondary)
             }
         }
         .task {
