@@ -256,3 +256,21 @@
 "tree.error.undo" = "파일을 원래 자리로 돌려놓지 못했어요: %@";
 "settings.tree.title" = "고슴도치";
 "settings.tree.note" = "파일을 고슴도치에게 놓으면 보관할 폴더를 추천해 줍니다. 추천을 위해 파일 이름, 종류, 크기, 날짜와 함께 폴더 이름과 폴더마다 항목 이름 몇 개가 TypeSafe로 전송됩니다. 파일 내용은 보내지 않습니다.";
+
+// Live cleanup activity
+"cleanup.last" = "지난 정리 결과";
+"cleanup.log.title" = "정리 진행 내역";
+"cleanup.log.planned" = "확인된 삭제 대상 · 파일 크기";
+"cleanup.log.confirmed" = "현재까지 확인된 대상 · 탐색 중";
+"cleanup.log.removed" = "삭제 완료 · 파일 크기";
+"cleanup.log.waiting" = "탐색이 진행되는 동안 발견한 항목과 용량이 여기에 쌓입니다.";
+"cleanup.log.discovery" = "탐색 단계의 추정 용량";
+"cleanup.log.estimate" = "발견 · 정리 범위 확인 전 추정치";
+"cleanup.log.sizeNote" = "탐색 추정치는 도구의 범위와 계산 기준을 따릅니다. 삭제 대상·완료는 같은 대상 파일의 크기를 합산하며, 실제 여유 공간 변화는 별도로 측정합니다.";
+"cleanup.log.ready" = "삭제 대상";
+"cleanup.log.cleaning" = "삭제 중";
+"cleanup.log.deleted" = "삭제 완료";
+"cleanup.log.kept" = "유지";
+"cleanup.result.planned" = "확인된 삭제 대상 파일 크기";
+"cleanup.log.progress" = "%@ 삭제 완료 / %@ 삭제 대상";
+"cleanup.log.partial" = "탐색 중단 전 확인된 대상";

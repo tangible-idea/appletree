@@ -31,6 +31,14 @@ final class CleanupStore: ObservableObject {
     @Published private(set) var progress = 0.0
     /// What the cleanup is currently looking at, so long phases show visible movement.
     @Published private(set) var detail = ""
+    @Published private(set) var logEntries: [CleanupLogEntry] = []
+    @Published private(set) var findings: [MolePreview.Finding] = []
+    @Published private(set) var plannedBytes: Int64 = 0
+    @Published private(set) var removedBytes: Int64 = 0
+    @Published private(set) var removedFiles = 0
+    @Published private(set) var planComplete = false
+    private var logIndices: [String: Int] = [:]
+    private var processedFiles = 0
     @Published private(set) var result: CleanupResult?
     @Published private(set) var history: [CleanupResult] = []
     @Published private(set) var errorMessage: String?
@@ -59,7 +67,10 @@ final class CleanupStore: ObservableObject {
             let records = await Task.detached(priority: .utility) {
                 (try? Data(contentsOf: url)).flatMap { try? JSONDecoder().decode([CleanupResult].self, from: $0) } ?? []
             }.value
-            if history.isEmpty { history = Array(records.prefix(10)); result = history.first }
+            if history.isEmpty {
+                history = Array(records.prefix(10))
+                if !isBusy, result == nil { result = history.first }
+            }
         }
     }
 
@@ -94,18 +105,30 @@ final class CleanupStore: ObservableObject {
         result = nil
         progress = 0
         detail = ""
+        logEntries = []
+        logIndices = [:]
+        findings = []
+        plannedBytes = 0
+        removedBytes = 0
+        removedFiles = 0
+        processedFiles = 0
+        planComplete = false
         phase = .discovering
         let settings = settings
         task = Task { [weak self] in
             guard let self else { return }
-            defer { phase = .idle; detail = ""; task = nil; deletionTask = nil }
+            let reporter = CleanupReporter { [weak self] updates in self?.apply(updates) }
+            defer {
+                reporter.flush()
+                phase = .idle; detail = ""; task = nil; deletionTask = nil
+            }
             do {
                 let cleaner = self.cleaner
                 let home = cleaner.home.path
-                let reporter = DetailReporter { [weak self] text in self?.detail = text }
                 let patterns = try MolePreview.protectedPatterns(home: cleaner.home)
                 let paths = try await MolePreview.discover(executable: moleURL, home: cleaner.home) { line in
-                    if let text = Self.describe(output: line, home: home) { reporter.send(text) }
+                    if let finding = MolePreview.finding(in: line) { reporter.send(.finding(finding)) }
+                    else if let text = Self.describe(output: line, home: home) { reporter.send(.detail(text)) }
                 }
                 try Task.checkCancellation()
                 reporter.flush()
@@ -113,29 +136,29 @@ final class CleanupStore: ObservableObject {
                 detail = L10n.text("cleanup.detail.activity")
                 let activity = try await Self.activity()
                 let planner = Task.detached(priority: .utility) {
-                    try cleaner.plan(paths: paths, settings: settings, activity: activity, moleProtection: patterns) { url in
-                        reporter.send(Self.shorten(url.path, home: home))
-                    }
+                    try cleaner.plan(paths: paths, settings: settings, activity: activity, moleProtection: patterns,
+                                     found: { reporter.send(.found($0)) },
+                                     progress: { reporter.send(.detail(Self.shorten($0.path, home: home))) })
                 }
                 let plan = try await withTaskCancellationHandler { try await planner.value } onCancel: { planner.cancel() }
                 try Task.checkCancellation()
                 // A second snapshot catches apps/files opened while the plan was being measured.
                 reporter.flush()
+                planComplete = true
                 detail = L10n.text("cleanup.detail.activity")
                 let currentActivity = try await Self.activity()
                 let currentProtection = try MolePreview.protectedPatterns(home: cleaner.home)
                 try Task.checkCancellation()
                 phase = .cleaning
                 detail = ""
-                let deletion = Task.detached(priority: .utility) { [weak self] in
-                    cleaner.execute(plan, activity: currentActivity, additionalProtection: currentProtection, progress: { completed, total in
-                        Task { @MainActor in
-                            self?.progress = total > 0 ? Double(completed) / Double(total) : 1
-                        }
-                    }, current: { url in reporter.send(Self.shorten(url.path, home: home)) })
+                let deletion = Task.detached(priority: .utility) {
+                    cleaner.execute(plan, activity: currentActivity, additionalProtection: currentProtection,
+                                    event: { reporter.send(.execution($0)) })
                 }
                 deletionTask = deletion
                 let finished = await withTaskCancellationHandler { await deletion.value } onCancel: { deletion.cancel() }
+                reporter.flush()
+                progress = plan.files.isEmpty ? 1 : Double(processedFiles) / Double(plan.files.count)
                 result = finished
                 history.insert(finished, at: 0)
                 history = Array(history.prefix(10))
@@ -158,6 +181,45 @@ final class CleanupStore: ObservableObject {
         task?.cancel()
     }
 
+    private func apply(_ updates: [CleanupUpdate]) {
+        // Publish once per batch, even when many small files are discovered together.
+        var entries = logEntries
+        var discoveries = findings
+        var planned = plannedBytes
+        var removed = removedBytes
+        var count = removedFiles
+        var latestDetail = detail
+        for update in updates {
+            switch update {
+            case .detail(let text): latestDetail = text
+            case .finding(let finding): discoveries.append(finding)
+            case .found(let file):
+                guard logIndices[file.url.path] == nil else { continue }
+                logIndices[file.url.path] = entries.count
+                entries.append(CleanupLogEntry(file: file, displayPath: Self.shorten(file.url.deletingLastPathComponent().path, home: cleaner.home.path)))
+                planned += file.size
+            case .execution(let event):
+                switch event {
+                case .removing(let file):
+                    if let index = logIndices[file.url.path] { entries[index].status = .cleaning }
+                    latestDetail = Self.shorten(file.url.path, home: cleaner.home.path)
+                case .finished(let file, let reason):
+                    guard let index = logIndices[file.url.path] else { continue }
+                    entries[index].status = reason.map { .skipped($0) } ?? .removed
+                    processedFiles += 1
+                    if reason == nil { removed += file.size; count += 1 }
+                }
+            }
+        }
+        logEntries = entries
+        findings = discoveries
+        plannedBytes = planned
+        removedBytes = removed
+        removedFiles = count
+        detail = latestDetail
+        if phase == .cleaning { progress = entries.isEmpty ? 1 : Double(processedFiles) / Double(entries.count) }
+    }
+
     private func saveHistory() async {
         let records = history
         let url = historyURL
@@ -178,8 +240,7 @@ final class CleanupStore: ObservableObject {
 
     /// Turns a line of the discovery tool's output into user-facing text, hiding the tool's own branding.
     nonisolated private static func describe(output line: String, home: String) -> String? {
-        let text = line.replacingOccurrences(of: "\u{1B}\\[[0-9;?]*[A-Za-z]", with: "", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = MolePreview.cleanOutput(line)
         guard !text.isEmpty, text.range(of: "mole", options: .caseInsensitive) == nil,
               !text.hasPrefix("#") else { return nil }
         return shorten(text.replacingOccurrences(of: home + "/", with: "~/"), home: home)
@@ -209,42 +270,5 @@ final class CleanupStore: ObservableObject {
             if name == "go" { tools.insert("go") }
         }
         return CleanupActivity(openPaths: paths, appIdentifiers: identifiers, appNames: names, busyTools: tools)
-    }
-}
-
-/// Delivers the latest background status to the main actor at most a few times per second.
-private final class DetailReporter: @unchecked Sendable {
-    private let lock = NSLock()
-    private var pending: String?
-    private var scheduled = false
-    private let apply: @MainActor (String) -> Void
-
-    init(apply: @escaping @MainActor (String) -> Void) { self.apply = apply }
-
-    func send(_ text: String) {
-        lock.lock()
-        pending = text
-        let schedule = !scheduled
-        scheduled = true
-        lock.unlock()
-        guard schedule else { return }
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(120))
-            self.deliver()
-        }
-    }
-
-    /// Drops anything still queued so a later phase's text is not overwritten.
-    func flush() {
-        lock.lock(); pending = nil; lock.unlock()
-    }
-
-    @MainActor private func deliver() {
-        lock.lock()
-        let text = pending
-        pending = nil
-        scheduled = false
-        lock.unlock()
-        if let text { apply(text) }
     }
 }

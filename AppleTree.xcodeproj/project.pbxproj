@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		6E1D62ECEAA3FDF29C02DE77 /* CleanupLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B73E77B21FF61F264E706C19 /* CleanupLog.swift */; };
 		02AA91F9583C3108A8D6186A /* CleanupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F0A91406C1CEE3641F77DA7 /* CleanupView.swift */; };
 		197B0472BB06ACC7C999DA6C /* AppDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 556C444909192737CA80DE1B /* AppDiagnostics.swift */; };
 		1A7CB47302B19F10F5156B6E /* libAppleTreeCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 55F82F42BF7533DD22D9F9AF /* libAppleTreeCore.a */; };
@@ -63,6 +64,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		B73E77B21FF61F264E706C19 /* CleanupLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CleanupLog.swift; sourceTree = "<group>"; };
 		017F848FE55D8AF613590626 /* ScanIndexCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanIndexCache.swift; sourceTree = "<group>"; };
 		082A38379E79E1BE4F8D8B09 /* SmartCleanup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartCleanup.swift; sourceTree = "<group>"; };
 		0855D1ED21E50D19B04770ED /* Sunburst.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sunburst.swift; sourceTree = "<group>"; };
@@ -130,6 +132,7 @@
 				0A148C1BF92057A8016494A2 /* AppleTreeApp.swift */,
 				4764D8C3877C9A7C4C70604D /* AppStore.swift */,
 				F529CDF0A650CB8CD0E015E4 /* ArchiveExporter.swift */,
+				B73E77B21FF61F264E706C19 /* CleanupLog.swift */,
 				2D6F755C716BE28A33B31D61 /* CleanupStore.swift */,
 				8F0A91406C1CEE3641F77DA7 /* CleanupView.swift */,
 				A8BEBC7600E4F987AAF38A32 /* ContentView.swift */,
@@ -391,6 +394,7 @@
 				CA3C678C84A615DE9AAE57EA /* AppStore.swift in Sources */,
 				4A5DF073CE2336AC32916356 /* AppleTreeApp.swift in Sources */,
 				9337EF776C196DD5E109D4AA /* ArchiveExporter.swift in Sources */,
+				6E1D62ECEAA3FDF29C02DE77 /* CleanupLog.swift in Sources */,
 				BE30C2A72FD302D32BD0DBD8 /* CleanupStore.swift in Sources */,
 				02AA91F9583C3108A8D6186A /* CleanupView.swift in Sources */,
 				DB22AC9BD5C2EB1FF2C3CC75 /* ContentView.swift in Sources */,

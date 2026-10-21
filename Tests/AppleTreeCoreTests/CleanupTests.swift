@@ -238,3 +238,112 @@ private struct CleanupFixture {
     catch is CancellationError {} catch { Issue.record("Unexpected cancellation error: \(error)") }
     await #expect(throws: CleanupFailure.self) { try await CleanupCommand.run(script, arguments: [], timeout: 0.2) }
 }
+
+@Test func cleanupStreamsVerifiedFilesAndOnlySuccessfulRemovalBytes() throws {
+    let fixture = try CleanupFixture()
+    defer { fixture.remove() }
+    let removed = try fixture.file("Library/Caches/example/remove.bin", size: 400)
+    let changed = try fixture.file("Library/Caches/example/changed.bin", size: 200)
+    _ = try fixture.file("Library/Caches/example/recent.bin", size: 900, old: false)
+    _ = try fixture.file("Library/Caches/example/key.pem", size: 700)
+    var found: [CleanupFile] = []
+    let plan = try fixture.cleaner.plan(paths: [fixture.home.appendingPathComponent("Library/Caches"), removed],
+                                        settings: CleanupSettings(), activity: CleanupActivity(), found: { file in
+        #expect(FileManager.default.fileExists(atPath: file.url.path))
+        found.append(file)
+    })
+    #expect(Set(found.map(\.url)) == [removed, changed])
+    #expect(found.reduce(0) { $0 + $1.size } == plan.eligibleBytes)
+    try Data(repeating: 2, count: 300).write(to: changed)
+    var successfulBytes: Int64 = 0
+    var completed: [URL] = []
+    let result = fixture.cleaner.execute(plan, activity: CleanupActivity(), event: { event in
+        switch event {
+        case .removing(let file):
+            #expect(FileManager.default.fileExists(atPath: file.url.path))
+        case .finished(let file, let reason):
+            completed.append(file.url)
+            if reason == nil {
+                #expect(!FileManager.default.fileExists(atPath: file.url.path))
+                successfulBytes += file.size
+            } else {
+                #expect(reason == .changed)
+                #expect(FileManager.default.fileExists(atPath: file.url.path))
+            }
+        }
+    })
+    #expect(completed.count == 2)
+    #expect(result.plannedBytes == 600)
+    #expect(result.removedBytes == 400)
+    #expect(successfulBytes == result.removedBytes)
+    #expect(result.removedBytes <= plan.eligibleBytes)
+    // Existing history must remain readable without the newly stored plan total.
+    let encoded = try JSONEncoder().encode(result)
+    var legacy = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+    legacy.removeValue(forKey: "planned")
+    let decoded = try JSONDecoder().decode(CleanupResult.self, from: JSONSerialization.data(withJSONObject: legacy))
+    #expect(decoded.plannedBytes == nil)
+    #expect(decoded.removedBytes == 400)
+}
+
+@Test func cleanupOutputPreservesBurstsCarriageReturnsAndSplitUTF8() {
+    var lines = CleanupOutputLines()
+    let text = "first\r\n→ 앱 캐시, 12.3MB dry\nlast"
+    let data = Data(text.utf8)
+    var output: [String] = []
+    // One byte at a time also splits every multibyte character and CRLF pair.
+    for byte in data { output += lines.append(Data([byte])) }
+    #expect(output == ["first", "→ 앱 캐시, 12.3MB dry"])
+    #expect(lines.finish() == "last")
+    #expect(lines.finish() == nil)
+    #expect(lines.append(Data("one\ntwo\nthree\n".utf8)) == ["one", "two", "three"])
+}
+
+@Test func cleanupDiscoveryEstimatesStaySeparateFromRemovalResults() throws {
+    let finding = try #require(MolePreview.finding(in: "  \u{1B}[33m→\u{1B}[0m Example app caches 3 items, \u{1B}[32m1.20GB\u{1B}[0m dry"))
+    #expect(finding.name == "Example app caches 3 items")
+    #expect(finding.size == "1.20GB")
+    #expect(MolePreview.finding(in: "→ Empty caches, 0B dry")?.size == "0B")
+    #expect(MolePreview.finding(in: "Finding caches…") == nil)
+    #expect(MolePreview.finding(in: "Total: 3.4GB") == nil)
+    #expect(MolePreview.finding(in: "✓ Caches, 4MB") == nil)
+}
+
+@Test func cleanupCommandDeliversAllFastOutputIncludingLastUnterminatedLine() async throws {
+    let fixture = try CleanupFixture()
+    defer { fixture.remove() }
+    let script = fixture.home.appendingPathComponent("fast-command")
+    try "#!/bin/bash\nprintf 'first\\nsecond\\nlast'\n".write(to: script, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: script.path)
+    let lines = CleanupTestLines()
+    let result = try await CleanupCommand.run(script, arguments: [], progress: { lines.append($0) })
+    #expect(result.status == 0)
+    #expect(lines.values == ["first", "second", "last"])
+}
+
+private final class CleanupTestLines: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: [String] = []
+    func append(_ value: String) { lock.lock(); defer { lock.unlock() }; stored.append(value) }
+    var values: [String] { lock.lock(); defer { lock.unlock() }; return stored }
+}
+
+@Test func cancelledCleanupKeepsProgressAndLogsAtActualCompletedCount() async throws {
+    let fixture = try CleanupFixture()
+    defer { fixture.remove() }
+    _ = try fixture.file("Library/Caches/example/first.bin", size: 200)
+    _ = try fixture.file("Library/Caches/example/second.bin", size: 100)
+    let plan = try fixture.cleaner.plan(paths: [fixture.home.appendingPathComponent("Library/Caches")],
+                                        settings: CleanupSettings(), activity: CleanupActivity())
+    let progress = CleanupTestLines()
+    let result = await Task.detached {
+        fixture.cleaner.execute(plan, activity: CleanupActivity(), event: { event in
+            if case .finished(_, skipped: nil) = event { withUnsafeCurrentTask { $0?.cancel() } }
+        }, progress: { completed, total in progress.append("\(completed)/\(total)") })
+    }.value
+    #expect(result.cancelled)
+    #expect(result.removedFiles == 1)
+    #expect(result.removedBytes == 200)
+    #expect(result.plannedBytes == 300)
+    #expect(progress.values.last == "1/2")
+}

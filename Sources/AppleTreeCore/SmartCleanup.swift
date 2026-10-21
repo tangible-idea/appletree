@@ -45,6 +45,12 @@ public struct CleanupFile: Sendable {
     let changed: timespec
 }
 
+public enum CleanupEvent: Sendable {
+    case removing(CleanupFile)
+    /// A nil reason means unlink succeeded; only this event counts as removed bytes.
+    case finished(CleanupFile, skipped: CleanupSkip?)
+}
+
 public struct CleanupPlan: Sendable {
     public let files: [CleanupFile]
     public let measured: [CleanupCategory: Int64]
@@ -59,6 +65,8 @@ public struct CleanupResult: Codable, Sendable, Identifiable {
     public let id: UUID
     public let date: Date
     public let before: [CleanupCategory: Int64]
+    /// Optional so records saved before live cleanup totals still decode.
+    public let planned: [CleanupCategory: Int64]?
     public let removed: [CleanupCategory: Int64]
     public let removedFiles: Int
     public let skipped: [CleanupSkip: Int]
@@ -66,6 +74,7 @@ public struct CleanupResult: Codable, Sendable, Identifiable {
     public let freeAfter: Int64?
     public let cancelled: Bool
     public var removedBytes: Int64 { removed.values.reduce(0, +) }
+    public var plannedBytes: Int64? { planned.map { $0.values.reduce(0, +) } }
     public var freeDelta: Int64? {
         guard let freeBefore, let freeAfter else { return nil }
         return freeAfter - freeBefore
@@ -94,6 +103,7 @@ public struct SmartCleanup: Sendable {
 
     public func plan(paths: [URL], settings: CleanupSettings, activity: CleanupActivity,
                      moleProtection: [String] = [], now: Date = Date(),
+                     found: (CleanupFile) -> Void = { _ in },
                      progress: (URL) -> Void = { _ in }) throws -> CleanupPlan {
         var files: [CleanupFile] = []
         var measured: [CleanupCategory: Int64] = [:]
@@ -155,8 +165,10 @@ public struct SmartCleanup: Sendable {
             guard Double(metadata.st_mtimespec.tv_sec) <= now.timeIntervalSince1970 - Double(age) * 86_400 else {
                 skipped[.recent, default: 0] += 1; return
             }
-            files.append(CleanupFile(url: url, category: category, size: size, device: metadata.st_dev,
-                                     inode: metadata.st_ino, modified: metadata.st_mtimespec, changed: metadata.st_ctimespec))
+            let file = CleanupFile(url: url, category: category, size: size, device: metadata.st_dev,
+                                   inode: metadata.st_ino, modified: metadata.st_mtimespec, changed: metadata.st_ctimespec)
+            files.append(file)
+            found(file)
         }
 
         // Ancestors first; visited paths deduplicate Mole's overlapping cleanup sections.
@@ -169,6 +181,7 @@ public struct SmartCleanup: Sendable {
     }
 
     public func execute(_ plan: CleanupPlan, activity: CleanupActivity, additionalProtection: [String] = [],
+                        event: (CleanupEvent) -> Void = { _ in },
                         progress: @Sendable (Int, Int) -> Void = { _, _ in },
                         current: (URL) -> Void = { _ in }) -> CleanupResult {
         let freeBefore = freeSpace()
@@ -176,19 +189,29 @@ public struct SmartCleanup: Sendable {
         var removedFiles = 0
         var skipped = plan.skipped
         var cancelled = Task.isCancelled
+        var completed = 0
         for (index, file) in plan.files.enumerated() {
             if Task.isCancelled { cancelled = true; break }
-            progress(index, plan.files.count)
-            current(file.url)
             if Date().timeIntervalSince(plan.createdAt) > 600 {
-                skipped[.changed, default: 0] += plan.files.count - index; break
+                for remaining in plan.files.dropFirst(index) { event(.finished(remaining, skipped: .changed)) }
+                skipped[.changed, default: 0] += plan.files.count - index
+                completed = plan.files.count
+                break
+            }
+            current(file.url)
+            event(.removing(file))
+            var reason: CleanupSkip?
+            defer {
+                event(.finished(file, skipped: reason))
+                completed += 1
+                progress(completed, plan.files.count)
             }
             guard category(for: file.url) == file.category, plan.settings.categories.contains(file.category),
                   !isProtected(file.url, settings: plan.settings, patterns: plan.moleProtection + additionalProtection) else {
-                skipped[.protected, default: 0] += 1; continue
+                reason = .protected; skipped[.protected, default: 0] += 1; continue
             }
-            guard !isBusy(file.url, activity: activity) else { skipped[.inUse, default: 0] += 1; continue }
-            guard let parent = openParent(file.url) else { skipped[.changed, default: 0] += 1; continue }
+            guard !isBusy(file.url, activity: activity) else { reason = .inUse; skipped[.inUse, default: 0] += 1; continue }
+            guard let parent = openParent(file.url) else { reason = .changed; skipped[.changed, default: 0] += 1; continue }
             defer { close(parent) }
             var current = stat()
             guard fstatat(parent, file.url.lastPathComponent, &current, AT_SYMLINK_NOFOLLOW) == 0,
@@ -196,15 +219,16 @@ public struct SmartCleanup: Sendable {
                   current.st_dev == file.device, current.st_ino == file.inode, current.st_size == file.size,
                   same(current.st_mtimespec, file.modified), same(current.st_ctimespec, file.changed),
                   parentStillAtPath(parent, file.url.deletingLastPathComponent()) else {
-                skipped[.changed, default: 0] += 1; continue
+                reason = .changed; skipped[.changed, default: 0] += 1; continue
             }
             if unlinkat(parent, file.url.lastPathComponent, 0) == 0 {
                 removed[file.category, default: 0] += file.size
                 removedFiles += 1
-            } else { skipped[.unreadable, default: 0] += 1 }
+            } else { reason = .unreadable; skipped[.unreadable, default: 0] += 1 }
         }
-        progress(plan.files.count, plan.files.count)
-        return CleanupResult(id: UUID(), date: Date(), before: plan.measured, removed: removed,
+        progress(completed, plan.files.count)
+        let planned = plan.files.reduce(into: [CleanupCategory: Int64]()) { $0[$1.category, default: 0] += $1.size }
+        return CleanupResult(id: UUID(), date: Date(), before: plan.measured, planned: planned, removed: removed,
                              removedFiles: removedFiles, skipped: skipped, freeBefore: freeBefore,
                              freeAfter: freeSpace(), cancelled: cancelled)
     }

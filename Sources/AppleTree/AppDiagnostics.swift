@@ -171,7 +171,9 @@ enum AppDiagnostics {
         func quote(_ value: String) -> String { "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'" }
         let script = fixture.appendingPathComponent("fake-mole.sh")
         let preview = ["# Mole Cleanup Preview - fixture", cache.deletingLastPathComponent().path + "  # 2.7MB", log.path + "  # 500KB"]
+        let discoveries = ["→ App caches, 2.7MB dry", "→ Old logs, 500KB dry"]
         let body = "#!/bin/bash\n[ \"$1\" = clean ] && [ \"$2\" = --dry-run ] || exit 4\nprintf '%s\\n' "
+            + discoveries.map(quote).joined(separator: " ") + "\nsleep 2\nprintf '%s\\n' "
             + preview.map(quote).joined(separator: " ") + " > " + quote(previewFolder.appendingPathComponent("clean-list.txt").path) + "\n"
         try body.write(to: script, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: script.path)
@@ -188,6 +190,14 @@ enum AppDiagnostics {
             await store.refreshAfterCleanup(invalidateCache: false)
             refreshed = true
         }
+        for _ in 0..<100 {
+            if cleanup.findings.count == 2 || !cleanup.isBusy { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        try require(cleanup.phase == .discovering && cleanup.findings.count == 2, "Discoveries were not streamed while Finding was still running")
+        try require(cleanup.findings.map(\.size) == ["2.7MB", "500KB"], "Discovery estimates were lost or repeated")
+        try require(cleanup.removedBytes == 0 && cleanup.result == nil, "Discovery estimates or old history were presented as current removals")
+        try require(FileManager.default.fileExists(atPath: cache.path), "Discovery deleted a file")
         for _ in 0..<600 {
             if !cleanup.isBusy { break }
             try await Task.sleep(for: .milliseconds(100))
@@ -196,6 +206,13 @@ enum AppDiagnostics {
         try require(cleanup.errorMessage == nil, "Cleanup failed: \(cleanup.errorMessage ?? "")")
         try require(cleanup.result?.removedBytes == 2_500_000, "Cleanup removed unexpected bytes")
         try require(cleanup.result?.removedFiles == 2, "Cleanup removed unexpected file count")
+        try require(cleanup.planComplete && cleanup.plannedBytes == 2_500_000, "Verified size includes recent or protected files")
+        try require(cleanup.result?.plannedBytes == cleanup.plannedBytes, "Saved plan differs from the live total")
+        try require(cleanup.removedBytes == cleanup.result?.removedBytes && cleanup.removedFiles == 2, "Live removal total differs from the result")
+        try require(cleanup.logEntries.count == 2 && cleanup.logEntries.allSatisfy {
+            if case .removed = $0.status { return true }; return false
+        }, "Successful deletion logs were lost")
+        try require(cleanup.logEntries.reduce(0) { $0 + $1.file.size } == cleanup.plannedBytes, "Log file sizes differ from the verified total")
         try require(!FileManager.default.fileExists(atPath: cache.path) && !FileManager.default.fileExists(atPath: log.path), "Old cache/log not removed")
         try require(FileManager.default.fileExists(atPath: recent.path) && FileManager.default.fileExists(atPath: key.path), "Cleanup lost protected files")
         try require(refreshed && store.root.size < before, "Cleanup did not refresh the space map")

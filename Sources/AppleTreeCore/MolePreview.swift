@@ -8,6 +8,27 @@ public struct CleanupFailure: LocalizedError, Sendable {
 }
 
 public enum MolePreview {
+    public struct Finding: Sendable, Equatable {
+        public let name: String
+        /// The tool’s estimate may include disk usage and a broader scope than our eligible files.
+        public let size: String
+    }
+
+    public static func cleanOutput(_ line: String) -> String {
+        line.replacingOccurrences(of: "\u{1B}\\[[0-9;?]*[A-Za-z]", with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Discovery estimates are display-only and never authorize a deletion.
+    public static func finding(in line: String) -> Finding? {
+        let text = cleanOutput(line)
+        let pattern = #"^→\s*(.+),\s*([0-9]+(?:\.[0-9]+)?\s*(?:[KMGTPE]i?)?B)\s+dry$"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              let name = Range(match.range(at: 1), in: text), let size = Range(match.range(at: 2), in: text) else { return nil }
+        return Finding(name: String(text[name]), size: String(text[size]))
+    }
+
     public static func locate() -> URL? {
         let paths = ["/opt/homebrew/bin/mo", "/usr/local/bin/mo", "/usr/local/bin/mole",
                      FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/bin/mo").path]
@@ -115,23 +136,28 @@ public enum CleanupCommand {
         environment["TERM"] = "dumb"
         environment["NO_COLOR"] = "1"
         process.environment = environment
+        let reader = try FileHandle(forReadingFrom: log)
+        defer { try? reader.close() }
         try process.run()
         let started = Date()
+        var lines = CleanupOutputLines()
+        var outputBytes = 0
+        func reportOutput(final: Bool = false) throws {
+            while let data = try reader.read(upToCount: 65_536), !data.isEmpty {
+                outputBytes += data.count
+                guard outputBytes <= 32_000_000 else { throw CleanupFailure("cleanup.error.previewFormat") }
+                for line in lines.append(data) { progress(line) }
+            }
+            if final, let line = lines.finish() { progress(line) }
+        }
         do {
             while process.isRunning {
                 try Task.checkCancellation()
                 guard Date().timeIntervalSince(started) < timeout else { throw CleanupFailure("cleanup.error.timeout") }
-                if let reader = try? FileHandle(forReadingFrom: log) {
-                    let end = (try? reader.seekToEnd()) ?? 0
-                    try? reader.seek(toOffset: end > 4096 ? end - 4096 : 0)
-                    let data = (try? reader.readToEnd()) ?? Data()
-                    try? reader.close()
-                    let line = String(decoding: data, as: UTF8.self).components(separatedBy: .newlines)
-                        .last(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? ""
-                    progress(line)
-                }
+                try reportOutput()
                 try await Task.sleep(for: .milliseconds(150))
             }
+            try reportOutput(final: true)
         } catch {
             stop(process)
             throw error
@@ -175,5 +201,28 @@ public enum CleanupCommand {
         // so a short bounded wait for Foundation to notice the exit is enough.
         let deadline = Date().addingTimeInterval(2)
         while process.isRunning, Date() < deadline { usleep(10_000) }
+    }
+}
+
+/// Retains partial lines (including split UTF-8) and emits every completed line once.
+struct CleanupOutputLines {
+    private var pending = Data()
+
+    mutating func append(_ data: Data) -> [String] {
+        pending.append(data)
+        var result: [String] = []
+        var start = pending.startIndex
+        for index in pending.indices where pending[index] == 10 || pending[index] == 13 {
+            if index > start { result.append(String(decoding: pending[start..<index], as: UTF8.self)) }
+            start = pending.index(after: index)
+        }
+        if start > pending.startIndex { pending.removeSubrange(pending.startIndex..<start) }
+        return result
+    }
+
+    mutating func finish() -> String? {
+        guard !pending.isEmpty else { return nil }
+        defer { pending.removeAll() }
+        return String(decoding: pending, as: UTF8.self)
     }
 }

@@ -256,3 +256,21 @@
 "tree.error.undo" = "Couldn't put the file back: %@";
 "settings.tree.title" = "Hedgehog";
 "settings.tree.note" = "Drop a file on the hedgehog and it suggests a folder to keep it in. To make the suggestion, the file's name, type, size and dates, along with your folder names and a few item names from each, are sent to TypeSafe. File contents are never sent.";
+
+// Live cleanup activity
+"cleanup.last" = "Previous cleanup result";
+"cleanup.log.title" = "Cleanup log";
+"cleanup.log.planned" = "Verified cleanup size · files";
+"cleanup.log.confirmed" = "Verified so far · still scanning";
+"cleanup.log.removed" = "Removed so far · files";
+"cleanup.log.waiting" = "Discovered items and sizes will appear here while the search continues.";
+"cleanup.log.discovery" = "Discovery estimates";
+"cleanup.log.estimate" = "Found · estimate before scope checks";
+"cleanup.log.sizeNote" = "Discovery estimates use the tool’s scope and size calculation. Verified and removed totals use the same eligible file sizes. Actual free space is measured separately.";
+"cleanup.log.ready" = "Ready";
+"cleanup.log.cleaning" = "Removing";
+"cleanup.log.deleted" = "Removed";
+"cleanup.log.kept" = "Kept";
+"cleanup.result.planned" = "Verified cleanup size (logical)";
+"cleanup.log.progress" = "%@ removed / %@ verified";
+"cleanup.log.partial" = "Verified before scanning stopped";
