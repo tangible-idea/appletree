@@ -89,11 +89,11 @@ struct CleanupSheet: View {
                         }
                     }
                     if cleanup.isBusy {
-                        CleanupProgress()
+                        CleanupProgress(log: cleanup.log)
                     }
                     if cleanup.selectedHistory == nil,
                        cleanup.isBusy || !cleanup.logEntries.isEmpty || !cleanup.findings.isEmpty {
-                        CleanupLogView()
+                        CleanupLogView(log: cleanup.log)
                     }
                     if let error = cleanup.errorMessage {
                         Label(error, systemImage: "info.circle").font(.system(size: 12)).foregroundStyle(Theme.accent)
@@ -225,6 +225,7 @@ private struct SegmentButtonStyle: ButtonStyle {
 
 private struct CleanupProgress: View {
     @EnvironmentObject private var cleanup: CleanupStore
+    @ObservedObject var log: CleanupLog
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -232,18 +233,18 @@ private struct CleanupProgress: View {
                 Text(cleanup.phase.title).font(.system(size: 13, weight: .semibold))
                 Spacer()
                 if cleanup.phase == .cleaning {
-                    Text(cleanup.progress.formatted(.percent.precision(.fractionLength(0))))
+                    Text(log.summary.progress.formatted(.percent.precision(.fractionLength(0))))
                         .font(.system(size: 12, design: .rounded)).foregroundStyle(Theme.accent)
                 }
             }
-            if cleanup.phase == .cleaning { ProgressView(value: cleanup.progress).tint(Theme.accent) }
+            if cleanup.phase == .cleaning { ProgressView(value: log.summary.progress).tint(Theme.accent) }
             if cleanup.phase == .cleaning || cleanup.phase == .refreshing {
-                Text(L10n.format("cleanup.log.progress", SizeText.format(cleanup.removedBytes), SizeText.format(cleanup.plannedBytes)))
+                Text(L10n.format("cleanup.log.progress", SizeText.format(log.summary.removedBytes), SizeText.format(log.summary.plannedBytes)))
                     .font(.system(size: 11, weight: .medium, design: .rounded)).monospacedDigit().foregroundStyle(Theme.green)
             }
-            if !cleanup.detail.isEmpty {
-                Text(cleanup.detail).font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.secondary)
-                    .lineLimit(1).truncationMode(.middle).help(cleanup.detail)
+            if !log.detail.isEmpty {
+                Text(log.detail).font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.secondary)
+                    .lineLimit(1).truncationMode(.middle).help(log.detail)
             }
         }
     }
@@ -251,27 +252,28 @@ private struct CleanupProgress: View {
 
 private struct CleanupLogView: View {
     @EnvironmentObject private var cleanup: CleanupStore
+    @ObservedObject var log: CleanupLog
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(L10n.text("cleanup.log.title")).font(.system(size: 13, weight: .semibold))
             if cleanup.phase != .discovering {
                 HStack(alignment: .top, spacing: 24) {
-                    metric(cleanup.planComplete ? "cleanup.log.planned" : (cleanup.isBusy ? "cleanup.log.confirmed" : "cleanup.log.partial"), bytes: cleanup.plannedBytes)
-                    metric("cleanup.log.removed", bytes: cleanup.removedBytes, color: Theme.green)
+                    metric(cleanup.planComplete ? "cleanup.log.planned" : (cleanup.isBusy ? "cleanup.log.confirmed" : "cleanup.log.partial"), bytes: log.summary.plannedBytes)
+                    metric("cleanup.log.removed", bytes: log.summary.removedBytes, color: Theme.green)
                 }
-                Text(L10n.format("cleanup.removed", SizeText.format(cleanup.removedBytes), cleanup.removedFiles.formatted()))
+                Text(L10n.format("cleanup.removed", SizeText.format(log.summary.removedBytes), log.summary.removedFiles.formatted()))
                     .font(.system(size: 11)).foregroundStyle(Theme.secondary)
             }
-            if cleanup.phase == .discovering || cleanup.logEntries.isEmpty {
-                if cleanup.findings.isEmpty {
+            if cleanup.phase == .discovering || log.entries.isEmpty {
+                if log.findings.isEmpty {
                     Text(L10n.text("cleanup.log.waiting")).font(.system(size: 11)).foregroundStyle(Theme.secondary)
                 } else {
                     discoveryLog
                 }
             } else {
                 fileLog
-                if !cleanup.findings.isEmpty {
+                if !log.findings.isEmpty {
                     DisclosureGroup(L10n.text("cleanup.log.discovery")) { discoveryLog.padding(.top, 8) }
                         .font(.system(size: 11))
                 }
@@ -295,7 +297,8 @@ private struct CleanupLogView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
-                    ForEach(Array(cleanup.findings.enumerated()), id: \.offset) { index, finding in
+                    ForEach(log.findings.indices, id: \.self) { index in
+                        let finding = log.findings[index]
                         HStack(alignment: .top, spacing: 10) {
                             Image(systemName: "magnifyingglass").foregroundStyle(Theme.accent)
                             VStack(alignment: .leading, spacing: 3) {
@@ -308,8 +311,8 @@ private struct CleanupLogView: View {
                     }
                 }.padding(.trailing, 8)
             }
-            .frame(height: min(220, CGFloat(cleanup.findings.count) * 44))
-            .onChange(of: cleanup.findings.count) { _, count in
+            .frame(height: min(220, CGFloat(log.findings.count) * 44))
+            .onChange(of: log.findings.count) { _, count in
                 if cleanup.phase == .discovering { proxy.scrollTo(count - 1, anchor: .bottom) }
             }
         }
@@ -318,28 +321,41 @@ private struct CleanupLogView: View {
     private var fileLog: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 12) {
-                    ForEach(cleanup.logEntries) { entry in
-                        CleanupLogRow(entry: entry, isBusy: cleanup.isBusy).id(entry.id)
-                    }
-                }.padding(.trailing, 8)
+                CleanupFileRows(entries: log.entries, version: log.entriesVersion, isBusy: cleanup.isBusy)
+                    .equatable().padding(.trailing, 8)
             }
-            .frame(height: min(240, CGFloat(cleanup.logEntries.count) * 60))
-            .onChange(of: cleanup.logEntries.count) { _, _ in
-                if let last = cleanup.logEntries.last { proxy.scrollTo(last.id, anchor: .bottom) }
+            .frame(height: min(240, CGFloat(log.entries.count) * 60))
+            .onChange(of: log.entries.count) { _, _ in
+                if let last = log.entries.last { proxy.scrollTo(last.id, anchor: .bottom) }
             }
-            .onChange(of: cleanup.detail) { _, _ in
-                if cleanup.phase == .cleaning,
-                   let current = cleanup.logEntries.first(where: { if case .cleaning = $0.status { return true }; return false }) {
-                    proxy.scrollTo(current.id, anchor: .center)
-                }
+            .onChange(of: log.focusedEntryID) { _, id in
+                if cleanup.phase == .cleaning, let id { proxy.scrollTo(id, anchor: .center) }
+            }
+        }
+    }
+}
+
+/// Progress/path changes don't require diffing an unchanged collection of thousands of files.
+private struct CleanupFileRows: View, Equatable {
+    let entries: [CleanupLogEntry]
+    let version: UInt64
+    let isBusy: Bool
+
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.version == rhs.version && lhs.isBusy == rhs.isBusy
+    }
+
+    var body: some View {
+        LazyVStack(alignment: .leading, spacing: 12) {
+            ForEach(entries) { entry in
+                CleanupLogRow(entry: entry, isBusy: isBusy).id(entry.id)
             }
         }
     }
 }
 
 private struct CleanupLogRow: View {
-    let entry: CleanupLogEntry
+    @ObservedObject var entry: CleanupLogEntry
     let isBusy: Bool
 
     private var appearance: (key: String, icon: String, color: Color) {
@@ -382,7 +398,7 @@ struct CleanupSummaryCard: View {
                 .font(.system(size: 22)).foregroundStyle(Theme.green)
             VStack(alignment: .leading, spacing: 6) {
                 if cleanup.isBusy {
-                    CleanupProgress()
+                    CleanupProgress(log: cleanup.log)
                 } else if let result = cleanup.result {
                     Text(L10n.text("cleanup.last")).font(.system(size: 10)).foregroundStyle(Theme.secondary)
                     Text(L10n.text(result.cancelled ? "cleanup.stopped" : "cleanup.done"))

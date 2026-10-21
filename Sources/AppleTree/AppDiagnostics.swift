@@ -1,5 +1,6 @@
 #if DEBUG
 import AppKit
+import Combine
 import SwiftUI
 import AppleTreeCore
 
@@ -144,6 +145,7 @@ enum AppDiagnostics {
         try await waitForScan(store)
         try require(store.errorMessage != nil && store.root.size == 250, "Error recovery lost previous results")
         store.errorMessage = nil
+        try await cacheBudgetSmokeTest()
         _ = try await cleanupSmokeTest(store)
     }
 
@@ -218,8 +220,89 @@ enum AppDiagnostics {
         try require(refreshed && store.root.size < before, "Cleanup did not refresh the space map")
         let records = try JSONDecoder().decode([CleanupResult].self, from: Data(contentsOf: historyURL))
         try require(records.first?.removedBytes == 2_500_000 && cleanup.configured, "Cleanup history or settings not saved")
+        try cleanupLogIsolationSmokeTest(files: cleanup.logEntries.map(\.file), home: canonicalHome, defaults: defaults, script: script)
         print("Cleanup integration passed: fake Mole preview, 2 fixture files removed, recent/key files kept, map refreshed, history saved.")
         return cleanup
+    }
+
+    private static func cleanupLogIsolationSmokeTest(files: [CleanupFile], home: URL, defaults: UserDefaults, script: URL) throws {
+        let probe = CleanupStore(defaults: defaults, historyURL: home.appendingPathComponent("unused-history.json"), home: home, executable: script)
+        let log = probe.log
+        var parentUpdates = 0
+        var membershipUpdates = 0
+        let parent = probe.objectWillChange.sink { parentUpdates += 1 }
+        let membership = log.$entries.dropFirst().sink { _ in membershipUpdates += 1 }
+        log.apply(files.map { .found($0) })
+        try require(parentUpdates == 0 && membershipUpdates == 1, "Log discovery invalidated the main browser or republished membership repeatedly")
+        let first = log.entries[0]
+        var firstUpdates = 0
+        var otherUpdates = 0
+        let firstRow = first.objectWillChange.sink { firstUpdates += 1 }
+        let otherRow = log.entries[1].objectWillChange.sink { otherUpdates += 1 }
+        log.apply([.execution(.removing(files[0])), .execution(.finished(files[0], skipped: nil))])
+        try require(first === log.entries[0] && firstUpdates == 2 && otherUpdates == 0, "A file update replaced or invalidated unrelated rows")
+        try require(parentUpdates == 0 && membershipUpdates == 1, "A status update republished the full file list or browser")
+        try require(log.summary.removedBytes == files[0].size && log.summary.removedFiles == 1, "Batched removal lost its size")
+        log.apply([.execution(.finished(files[0], skipped: nil)), .execution(.finished(files[1], skipped: .inUse))])
+        try require(log.summary.processedFiles == 2 && log.summary.removedFiles == 1, "A duplicate or skipped event inflated removal totals")
+        try require(log.focusedEntryID == files[1].url.path, "Log focus requires searching the full list")
+        withExtendedLifetime((parent, membership, firstRow, otherRow)) {}
+
+        var delivered: [CleanupUpdate] = []
+        let reporter = CleanupReporter { delivered += $0 }
+        for index in 0..<10_000 { reporter.send(.detail(String(index))) }
+        reporter.send(.found(files[0]))
+        reporter.send(.execution(.finished(files[0], skipped: nil)))
+        reporter.flush()
+        try require(delivered.count == 3, "Transient paths were not coalesced, or a file event was dropped")
+        if case .detail(let text) = delivered.last {
+            try require(text == "9999", "The latest path was lost")
+        } else { throw DiagnosticError.failed("The latest path was not delivered") }
+        print("Log update isolation passed: no browser or membership updates during deletion, only the changed row notified, 10,000 transient paths coalesced.")
+    }
+
+    private static func cacheBudgetSmokeTest() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("AppleTree-cache-budget-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = ScanIndexCache(directory: directory, nodeLimit: 3, reportLimit: 2)
+        func report(_ name: String, files: Int) -> ScanReport {
+            let url = directory.appendingPathComponent(name)
+            let children = (0..<files).map { FileNode(url: url.appendingPathComponent("file-\($0)"), isDirectory: false, size: 10) }
+            return ScanReport(root: FileNode(url: url, isDirectory: true, size: Int64(files * 10), children: children))
+        }
+        let large = report("large", files: 3)
+        cache.set(large, for: large.root.url)
+        try require(cache.memoryReportCount == 0, "An oversized tree was retained in memory cache")
+        let active = await cache.findNodeInCachedTrees(for: large.root.children[0].url, activeReport: large)
+        try require(active?.report.root === large.root && active?.node === large.root.children[0], "The active oversized tree was reloaded or lost")
+        let first = report("first", files: 1)
+        let second = report("second", files: 1)
+        cache.set(first, for: first.root.url)
+        cache.set(second, for: second.root.url)
+        try require(cache.memoryReportCount == 1 && cache.memoryNodeCount == 2, "The retained tree budget was exceeded")
+        var reloaded: ScanReport?
+        for _ in 0..<100 {
+            reloaded = await cache.get(for: first.root.url)
+            if reloaded != nil { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        try require(reloaded?.isCached == true && reloaded?.root.size == first.root.size, "Eviction removed the disk archive")
+        try require(reloaded?.root !== first.root && cache.memoryNodeCount <= 3, "Eviction did not reload from disk within budget")
+        var reloadedLarge: ScanReport?
+        for _ in 0..<100 {
+            reloadedLarge = await cache.get(for: large.root.url)
+            if reloadedLarge != nil { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        try require(reloadedLarge?.root.nodeCount == 4 && cache.memoryNodeCount <= 3, "An oversized archive could not be reopened within budget")
+        let childURL = directory.appendingPathComponent("parent/child")
+        let oldChild = FileNode(url: childURL, isDirectory: true, size: 10)
+        let ancestor = ScanReport(root: FileNode(url: childURL.deletingLastPathComponent(), isDirectory: true, size: 10, children: [oldChild]))
+        let fresh = ScanReport(root: FileNode(url: childURL, isDirectory: true, size: 20))
+        cache.set(fresh, for: childURL)
+        let latest = await cache.findNodeInCachedTrees(for: childURL, activeReport: ancestor)
+        try require(latest?.node === fresh.root, "Active ancestor hid a newer exact cached scan")
+        print("Cache budget integration passed: oversized active tree reused, evicted archives reloaded, retained nodes stayed within budget.")
     }
 
     private static func waitForScan(_ store: AppStore) async throws {

@@ -80,6 +80,8 @@ public final class FileNode: Identifiable, Sendable {
     public let fileCount: Int
     public let directoryCount: Int
     public let children: [FileNode]
+    /// Includes this node and every descendant; computed once when the tree is built.
+    public let nodeCount: Int
     public let modified: Date?
     public var kind: FileKind { isDirectory ? .folder : FileKind.classify(name: name) }
 
@@ -90,6 +92,7 @@ public final class FileNode: Identifiable, Sendable {
         self.isDirectory = isDirectory
         self.size = size
         self.children = children
+        self.nodeCount = 1 + children.reduce(0) { $0 + $1.nodeCount }
         self.modified = modified
         self.fileCount = fileCount ?? (isDirectory ? children.reduce(0) { $0 + $1.fileCount } : 1)
         self.directoryCount = directoryCount ?? (isDirectory ? children.filter { $0.isDirectory }.count : 0)

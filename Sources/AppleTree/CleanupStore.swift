@@ -28,17 +28,14 @@ final class CleanupStore: ObservableObject {
     }
     @Published private(set) var configured: Bool
     @Published private(set) var phase: Phase = .idle
-    @Published private(set) var progress = 0.0
-    /// What the cleanup is currently looking at, so long phases show visible movement.
-    @Published private(set) var detail = ""
-    @Published private(set) var logEntries: [CleanupLogEntry] = []
-    @Published private(set) var findings: [MolePreview.Finding] = []
-    @Published private(set) var plannedBytes: Int64 = 0
-    @Published private(set) var removedBytes: Int64 = 0
-    @Published private(set) var removedFiles = 0
+    let log: CleanupLog
+    var progress: Double { log.summary.progress }
+    var logEntries: [CleanupLogEntry] { log.entries }
+    var findings: [MolePreview.Finding] { log.findings }
+    var plannedBytes: Int64 { log.summary.plannedBytes }
+    var removedBytes: Int64 { log.summary.removedBytes }
+    var removedFiles: Int { log.summary.removedFiles }
     @Published private(set) var planComplete = false
-    private var logIndices: [String: Int] = [:]
-    private var processedFiles = 0
     @Published private(set) var result: CleanupResult?
     @Published private(set) var history: [CleanupResult] = []
     @Published private(set) var errorMessage: String?
@@ -57,6 +54,7 @@ final class CleanupStore: ObservableObject {
     init(defaults: UserDefaults = .standard, historyURL: URL? = nil, home: URL? = nil, executable: URL? = nil) {
         self.defaults = defaults
         self.cleaner = SmartCleanup(home: home ?? FileManager.default.homeDirectoryForCurrentUser)
+        self.log = CleanupLog(home: cleaner.home.path)
         settings = defaults.data(forKey: Self.settingsKey).flatMap { try? JSONDecoder().decode(CleanupSettings.self, from: $0) } ?? CleanupSettings()
         configured = defaults.bool(forKey: Self.configuredKey)
         moleURL = executable ?? MolePreview.locate()
@@ -103,24 +101,16 @@ final class CleanupStore: ObservableObject {
         errorMessage = nil
         historyError = false
         result = nil
-        progress = 0
-        detail = ""
-        logEntries = []
-        logIndices = [:]
-        findings = []
-        plannedBytes = 0
-        removedBytes = 0
-        removedFiles = 0
-        processedFiles = 0
+        log.reset()
         planComplete = false
         phase = .discovering
         let settings = settings
         task = Task { [weak self] in
             guard let self else { return }
-            let reporter = CleanupReporter { [weak self] updates in self?.apply(updates) }
+            let reporter = CleanupReporter { [weak self] updates in self?.log.apply(updates) }
             defer {
                 reporter.flush()
-                phase = .idle; detail = ""; task = nil; deletionTask = nil
+                phase = .idle; log.setDetail(""); task = nil; deletionTask = nil
             }
             do {
                 let cleaner = self.cleaner
@@ -133,7 +123,7 @@ final class CleanupStore: ObservableObject {
                 try Task.checkCancellation()
                 reporter.flush()
                 phase = .checking
-                detail = L10n.text("cleanup.detail.activity")
+                log.setDetail(L10n.text("cleanup.detail.activity"))
                 let activity = try await Self.activity()
                 let planner = Task.detached(priority: .utility) {
                     try cleaner.plan(paths: paths, settings: settings, activity: activity, moleProtection: patterns,
@@ -145,12 +135,12 @@ final class CleanupStore: ObservableObject {
                 // A second snapshot catches apps/files opened while the plan was being measured.
                 reporter.flush()
                 planComplete = true
-                detail = L10n.text("cleanup.detail.activity")
+                log.setDetail(L10n.text("cleanup.detail.activity"))
                 let currentActivity = try await Self.activity()
                 let currentProtection = try MolePreview.protectedPatterns(home: cleaner.home)
                 try Task.checkCancellation()
                 phase = .cleaning
-                detail = ""
+                log.setDetail("")
                 let deletion = Task.detached(priority: .utility) {
                     cleaner.execute(plan, activity: currentActivity, additionalProtection: currentProtection,
                                     event: { reporter.send(.execution($0)) })
@@ -158,14 +148,14 @@ final class CleanupStore: ObservableObject {
                 deletionTask = deletion
                 let finished = await withTaskCancellationHandler { await deletion.value } onCancel: { deletion.cancel() }
                 reporter.flush()
-                progress = plan.files.isEmpty ? 1 : Double(processedFiles) / Double(plan.files.count)
+                log.complete()
                 result = finished
                 history.insert(finished, at: 0)
                 history = Array(history.prefix(10))
                 reporter.flush()
                 await saveHistory()
                 phase = .refreshing
-                detail = ""
+                log.setDetail("")
                 await afterCleanup()
             } catch is CancellationError {
                 errorMessage = L10n.text("cleanup.cancelledBefore")
@@ -179,45 +169,6 @@ final class CleanupStore: ObservableObject {
         guard canCancel else { return }
         deletionTask?.cancel()
         task?.cancel()
-    }
-
-    private func apply(_ updates: [CleanupUpdate]) {
-        // Publish once per batch, even when many small files are discovered together.
-        var entries = logEntries
-        var discoveries = findings
-        var planned = plannedBytes
-        var removed = removedBytes
-        var count = removedFiles
-        var latestDetail = detail
-        for update in updates {
-            switch update {
-            case .detail(let text): latestDetail = text
-            case .finding(let finding): discoveries.append(finding)
-            case .found(let file):
-                guard logIndices[file.url.path] == nil else { continue }
-                logIndices[file.url.path] = entries.count
-                entries.append(CleanupLogEntry(file: file, displayPath: Self.shorten(file.url.deletingLastPathComponent().path, home: cleaner.home.path)))
-                planned += file.size
-            case .execution(let event):
-                switch event {
-                case .removing(let file):
-                    if let index = logIndices[file.url.path] { entries[index].status = .cleaning }
-                    latestDetail = Self.shorten(file.url.path, home: cleaner.home.path)
-                case .finished(let file, let reason):
-                    guard let index = logIndices[file.url.path] else { continue }
-                    entries[index].status = reason.map { .skipped($0) } ?? .removed
-                    processedFiles += 1
-                    if reason == nil { removed += file.size; count += 1 }
-                }
-            }
-        }
-        logEntries = entries
-        findings = discoveries
-        plannedBytes = planned
-        removedBytes = removed
-        removedFiles = count
-        detail = latestDetail
-        if phase == .cleaning { progress = entries.isEmpty ? 1 : Double(processedFiles) / Double(entries.count) }
     }
 
     private func saveHistory() async {

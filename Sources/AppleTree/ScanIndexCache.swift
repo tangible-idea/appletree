@@ -6,7 +6,9 @@ import AppleTreeCore
 final class ScanIndexCache {
     static let shared = ScanIndexCache()
 
-    private var memoryCache: [String: ScanReport] = [:]
+    private var memoryCache: ScanReportMemoryCache
+    var memoryNodeCount: Int { memoryCache.nodeCount }
+    var memoryReportCount: Int { memoryCache.count }
     private var loading: [String: Task<ScanReport?, Never>] = [:]
     private let cacheDirectory: URL
     private let manifestURL: URL
@@ -19,8 +21,9 @@ final class ScanIndexCache {
         let scannedAt: Date
     }
 
-    private init() {
-        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
+    init(directory: URL? = nil, nodeLimit: Int = 100_000, reportLimit: Int = 2) {
+        self.memoryCache = ScanReportMemoryCache(nodeLimit: nodeLimit, reportLimit: reportLimit)
+        let base = directory ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
             .appendingPathComponent("AppleTree", isDirectory: true)
             ?? FileManager.default.temporaryDirectory.appendingPathComponent("AppleTree", isDirectory: true)
         self.cacheDirectory = base.appendingPathComponent("Scans", isDirectory: true)
@@ -79,7 +82,7 @@ final class ScanIndexCache {
     /// Loads a cached tree, decoding off the main thread. Concurrent requests share one load.
     func get(for url: URL) async -> ScanReport? {
         let pathKey = key(for: canonicalPath(for: url))
-        if let memory = memoryCache[pathKey] { return memory }
+        if let memory = memoryCache.value(forKey: pathKey) { return memory }
         if let pending = loading[pathKey] { return await pending.value }
         guard let entry = manifest[pathKey] else { return nil }
         let file = cacheDirectory.appendingPathComponent(entry.fileName)
@@ -101,7 +104,7 @@ final class ScanIndexCache {
         let report = await task.value
         loading[pathKey] = nil
         if let report {
-            memoryCache[pathKey] = report
+            memoryCache.insert(report, forKey: pathKey)
             if isLegacy && FileManager.default.fileExists(atPath: converted.path) {
                 manifest[pathKey] = ManifestEntry(path: entry.path, fileName: converted.lastPathComponent,
                                                   size: entry.size, scannedAt: entry.scannedAt)
@@ -112,19 +115,32 @@ final class ScanIndexCache {
     }
 
     /// Finds a node within any previously scanned parent tree.
-    func findNodeInCachedTrees(for url: URL) async -> (report: ScanReport, node: FileNode)? {
+    func findNodeInCachedTrees(for url: URL, activeReport: ScanReport? = nil) async -> (report: ScanReport, node: FileNode)? {
         let targetPath = canonicalPath(for: url)
+        // The active tree can exceed the cache budget. Reuse it without retaining a second copy.
+        if let activeReport, activeReport.root.url.path == targetPath {
+            _ = memoryCache.value(forKey: targetPath)
+            return (activeReport, activeReport.root)
+        }
 
         if let direct = await get(for: url) {
             return (direct, direct.root)
+        }
+        // An exact cached scan can be newer than the active ancestor's snapshot.
+        if let activeReport, let node = activeReport.root.findNode(path: targetPath) {
+            _ = memoryCache.value(forKey: activeReport.root.url.path)
+            return (activeReport, node)
         }
 
         func contains(_ rootPath: String) -> Bool {
             targetPath.hasPrefix(rootPath.hasSuffix("/") ? rootPath : rootPath + "/")
         }
 
-        for (_, report) in memoryCache where contains(canonicalPath(for: report.root.url)) {
-            if let found = report.root.findNode(path: targetPath) { return (report, found) }
+        for report in memoryCache.reports where contains(canonicalPath(for: report.root.url)) {
+            if let found = report.root.findNode(path: targetPath) {
+                _ = memoryCache.value(forKey: canonicalPath(for: report.root.url))
+                return (report, found)
+            }
         }
 
         // Prefer the closest cached ancestor: it is the smallest tree to load.
@@ -139,7 +155,7 @@ final class ScanIndexCache {
 
     func set(_ report: ScanReport, for url: URL) {
         let pathKey = key(for: canonicalPath(for: url))
-        memoryCache[pathKey] = report
+        memoryCache.insert(report, forKey: pathKey)
 
         let fileName = deterministicFileName(for: pathKey)
         let entry = ManifestEntry(path: pathKey, fileName: fileName,
@@ -165,10 +181,10 @@ final class ScanIndexCache {
 
     func remove(for url: URL) {
         let pathKey = key(for: canonicalPath(for: url))
+        let file = fileURL(for: pathKey)
         memoryCache.removeValue(forKey: pathKey)
         manifest.removeValue(forKey: pathKey)
         saveManifest()
-        let file = fileURL(for: pathKey)
         try? FileManager.default.removeItem(at: file)
     }
 

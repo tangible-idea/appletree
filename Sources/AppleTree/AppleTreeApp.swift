@@ -7,7 +7,6 @@ struct AppleTreeApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var store: AppStore
     @AppStorage(LanguagePreference.key) private var appLanguage = LanguagePreference.system
-    @AppStorage(DesktopTreePreference.key) private var showDesktopTree = DesktopTreePreference.defaultValue
 
     init() {
         // Diagnostics pin the language through launch arguments instead.
@@ -43,8 +42,6 @@ struct AppleTreeApp: App {
                     #endif
                 }
         }
-        // Share menu URLs go to the hedgehog (AppDelegate), not into a new window.
-        .handlesExternalEvents(matching: [])
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1320, height: 920)
         .commands {
@@ -55,11 +52,6 @@ struct AppleTreeApp: App {
                 Button(L10n.text("action.refresh")) { store.refresh() }.keyboardShortcut("r").disabled(store.isScanning || store.cleanup.isBusy)
                 Button(L10n.text("cleanup.title")) { store.smartClean() }
                     .disabled(store.isScanning || store.exportProgress != nil)
-            }
-            CommandGroup(before: .windowList) {
-                Toggle(L10n.text("tree.menu.show"), isOn: Binding(get: { showDesktopTree },
-                                                                   set: { DesktopTreeController.shared.setVisible($0) }))
-                Divider()
             }
             CommandMenu(L10n.text("menu.navigate")) {
                 Button(L10n.text("action.parent")) { store.goBack() }.keyboardShortcut("[", modifiers: .command)
@@ -78,20 +70,6 @@ struct AppleTreeApp: App {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     weak var store: AppStore?
-
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        let isDiagnostic = CommandLine.arguments.contains("--smoke-test") || CommandLine.arguments.contains("--snapshot")
-        if !isDiagnostic && DesktopTreePreference.isOn { DesktopTreeController.shared.setVisible(true) }
-    }
-
-    /// `appletree://organize?path=…`, sent by the Share menu extension: the hedgehog suggests a folder.
-    func application(_ application: NSApplication, open urls: [URL]) {
-        let files = urls.filter { $0.scheme == "appletree" && $0.host == "organize" }.flatMap { url in
-            (URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? [])
-                .filter { $0.name == "path" }.compactMap(\.value).map { URL(fileURLWithPath: $0) }
-        }
-        if !files.isEmpty { DesktopTreeController.shared.organize(files) }
-    }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         // AppKit ignores a quit request while a window has a sheet attached, so System Settings'

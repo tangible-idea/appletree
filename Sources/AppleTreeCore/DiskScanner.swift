@@ -141,3 +141,55 @@ public enum DiskScanner {
                           elapsed: Date().timeIntervalSince(start), scannedAt: Date(), isCached: false)
     }
 }
+
+/// Bounds retained scan trees by node count and evicts the least recently used report.
+/// Disk archives and a report currently displayed by the app have independent lifetimes.
+public struct ScanReportMemoryCache: Sendable {
+    private struct Entry: Sendable {
+        let report: ScanReport
+        let cost: Int
+        var access: UInt64
+    }
+    private var entries: [String: Entry] = [:]
+    private var clock: UInt64 = 0
+    public let nodeLimit: Int
+    public let reportLimit: Int
+    public private(set) var nodeCount = 0
+    public var count: Int { entries.count }
+    public var reports: [ScanReport] { entries.values.map(\.report) }
+
+    public init(nodeLimit: Int = 100_000, reportLimit: Int = 2) {
+        self.nodeLimit = max(0, nodeLimit)
+        self.reportLimit = max(0, reportLimit)
+    }
+
+    public mutating func value(forKey key: String) -> ScanReport? {
+        guard var entry = entries[key] else { return nil }
+        clock &+= 1
+        entry.access = clock
+        entries[key] = entry
+        return entry.report
+    }
+
+    public mutating func insert(_ report: ScanReport, forKey key: String) {
+        removeValue(forKey: key)
+        let cost = report.root.nodeCount
+        guard reportLimit > 0, cost <= nodeLimit else { return }
+        while entries.count >= reportLimit || nodeCount + cost > nodeLimit {
+            guard let oldest = entries.min(by: { $0.value.access < $1.value.access })?.key else { break }
+            removeValue(forKey: oldest)
+        }
+        clock &+= 1
+        entries[key] = Entry(report: report, cost: cost, access: clock)
+        nodeCount += cost
+    }
+
+    public mutating func removeValue(forKey key: String) {
+        if let removed = entries.removeValue(forKey: key) { nodeCount -= removed.cost }
+    }
+
+    public mutating func removeAll() {
+        entries.removeAll()
+        nodeCount = 0
+    }
+}

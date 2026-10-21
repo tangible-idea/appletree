@@ -293,3 +293,77 @@ private func indexFixture() -> FileNode {
     // "e" also matches left-pad and the inner node_modules, which ride along with the outer folder.
     #expect(index.exportRoots(SearchQuery(text: "e"), in: project).map(\.name) == ["release.jks", "node_modules", "package.json"])
 }
+
+private func cacheReport(_ name: String, children: Int) -> ScanReport {
+    let url = URL(fileURLWithPath: "/cache-test/" + name)
+    // Empty directories consume memory too, despite having zero files.
+    let nodes = (0..<children).map {
+        FileNode(url: url.appendingPathComponent(String($0)), isDirectory: true, size: 0)
+    }
+    return ScanReport(root: FileNode(url: url, isDirectory: true, size: 0, children: nodes))
+}
+
+@Test func memoryCacheEvictsLeastRecentlyUsedWithinNodeBudget() {
+    var cache = ScanReportMemoryCache(nodeLimit: 7, reportLimit: 3)
+    let first = cacheReport("first", children: 2)
+    let second = cacheReport("second", children: 2)
+    let third = cacheReport("third", children: 3)
+    cache.insert(first, forKey: "first")
+    cache.insert(second, forKey: "second")
+    #expect(cache.nodeCount == 6)
+    #expect(cache.value(forKey: "first")?.root === first.root)
+    cache.insert(third, forKey: "third")
+    #expect(cache.value(forKey: "second") == nil)
+    #expect(cache.value(forKey: "first")?.root === first.root)
+    #expect(cache.value(forKey: "third")?.root === third.root)
+    #expect(cache.nodeCount == 7)
+    #expect(cache.count == 2)
+}
+
+@Test func memoryCacheLimitsReportsAndSkipsOversizedTrees() {
+    var cache = ScanReportMemoryCache(nodeLimit: 10, reportLimit: 2)
+    cache.insert(cacheReport("one", children: 0), forKey: "one")
+    cache.insert(cacheReport("two", children: 0), forKey: "two")
+    cache.insert(cacheReport("three", children: 0), forKey: "three")
+    #expect(cache.count == 2)
+    #expect(cache.value(forKey: "one") == nil)
+    cache.insert(cacheReport("large", children: 10), forKey: "large")
+    #expect(cache.value(forKey: "large") == nil)
+    #expect(cache.count == 2)
+    cache.insert(cacheReport("replacement", children: 3), forKey: "two")
+    #expect(cache.nodeCount == 5)
+    cache.removeValue(forKey: "two")
+    #expect(cache.nodeCount == 1)
+    cache.removeAll()
+    #expect(cache.count == 0 && cache.nodeCount == 0)
+    var disabled = ScanReportMemoryCache(nodeLimit: 0)
+    disabled.insert(cacheReport("disabled", children: 0), forKey: "disabled")
+    #expect(disabled.count == 0)
+}
+
+@Test func memoryCacheReleasesEvictedTreeButPreservesActiveReport() {
+    var cache = ScanReportMemoryCache(nodeLimit: 10, reportLimit: 1)
+    weak var oldRoot: FileNode?
+    do {
+        let report = cacheReport("old", children: 2)
+        oldRoot = report.root
+        cache.insert(report, forKey: "old")
+    }
+    #expect(oldRoot != nil)
+    let active = cacheReport("active", children: 2)
+    cache.insert(active, forKey: "active")
+    #expect(oldRoot == nil)
+    cache.removeAll()
+    #expect(active.root.nodeCount == 3)
+}
+
+@Test func subtreeNodeCountSurvivesBothArchiveFormats() throws {
+    let url = URL(fileURLWithPath: "/count-test")
+    let empty = FileNode(url: url.appendingPathComponent("empty"), isDirectory: true, size: 0)
+    let folder = FileNode(url: url.appendingPathComponent("nested"), isDirectory: true, size: 0, children: [empty])
+    let file = FileNode(url: url.appendingPathComponent("file"), isDirectory: false, size: 30)
+    let report = ScanReport(root: FileNode(url: url, isDirectory: true, size: 30, children: [folder, file]))
+    #expect(report.root.nodeCount == 4)
+    #expect(try ScanArchive.decode(ScanArchive.encode(report)).root.nodeCount == 4)
+    #expect(try JSONDecoder().decode(ScanReport.self, from: JSONEncoder().encode(report)).root.nodeCount == 4)
+}

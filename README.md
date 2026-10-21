@@ -25,7 +25,12 @@ open dist/AppleTree.app
 - **폴더별 보기**와 **큰 파일** 목록에는 수정일이 표시됩니다. 날짜에 마우스를 올리면 정확한 시간도 확인할 수 있습니다. 설정(⌘,) → **파일 목록에 수정일 표시**에서 날짜 열을 켜거나 끌 수 있으며, 선택은 즉시 적용되고 다음 실행에도 유지됩니다.
 - 파일 작업 메뉴에서 열기, Finder에서 보기, 경로 복사, 휴지통으로 이동을 사용할 수 있습니다. 휴지통 이동은 확인 후 실행되며, 결과를 다시 분석합니다.
 - 분석 중 취소하면 이전 결과가 유지됩니다. 접근할 수 없는 항목은 결과에서 제외하고 안내합니다.
-- Finder 등에서 파일을 **공유 → AppleTree**로 보내면 고슴도치가 나타나 둘 폴더를 추천합니다. 고슴도치를 숨겨 두었어도 이때는 나타났다가 정리가 끝나면 다시 숨습니다. 공유 메뉴에 보이지 않으면 시스템 설정 → 일반 → 로그인 항목 및 확장 프로그램 → 공유에서 AppleTree를 켜세요. 이 기능은 `scripts/build-app.sh`로 만든 앱에만 들어 있습니다.
+
+## 실행 부하와 분석 캐시
+
+바탕화면 고슴도치와 연결된 공유 메뉴 기능은 제거했습니다. 상시 애니메이션을 실행하지 않습니다.
+정리 진행 내역은 메인 탐색 화면과 분리하고, 로그 상태는 해당 행만 갱신합니다. 화면 갱신은 약 0.25초 간격으로 묶되 발견·삭제 결과는 모두 유지합니다.
+분석 트리의 메모리 캐시는 최근 사용 순으로 최대 2개, 총 10만 노드(파일·폴더)를 보관합니다. 한도를 넘는 분석도 현재 화면에서는 그대로 사용할 수 있으며, 디스크의 분석 기록은 유지합니다. 메모리에서 빠진 기록을 다시 열 때는 디스크에서 불러옵니다.
 
 ## 알아서 정리
 
@@ -78,7 +83,6 @@ swift run AppleTree -AppleLanguages '(ko)' --expect-language ko --smoke-test
 - `Sources/AppleTree/Resources/AppleTree.icns`: 개발 실행과 앱 패키지에 공통으로 사용하는 사과나무 아이콘
 - `Sources/AppleTree/Resources/Assets.xcassets/AppIcon.appiconset`: Xcode·App Store용 아이콘. 1024px를 포함한 macOS의 10개 크기를 등록합니다.
 - `scripts/build-icons.sh`: `MakeIcon.swift`의 같은 디자인으로 AppIcon 에셋과 `.icns`를 함께 재생성합니다.
-- `ShareExtension`: 공유 메뉴 확장. 받은 파일 경로를 `appletree://organize?path=…`로 앱에 넘깁니다.
-- `scripts/build-app.sh`: 릴리스 빌드, 공유 확장 빌드, 공통 아이콘 복사, `.app` 패키징
+- `scripts/build-app.sh`: 릴리스 빌드, 공통 아이콘 복사, `.app` 패키징
 
 CLI로 폴더를 지정해 실행할 수도 있습니다: `swift run AppleTree --scan /path/to/folder`.

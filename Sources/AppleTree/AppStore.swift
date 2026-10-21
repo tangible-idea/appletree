@@ -305,7 +305,7 @@ final class AppStore: ObservableObject {
 
         // Loading a cached tree can take a moment for a whole disk, so it happens off the main thread.
         Task {
-            let cached = await ScanIndexCache.shared.findNodeInCachedTrees(for: url)
+            let cached = await ScanIndexCache.shared.findNodeInCachedTrees(for: url, activeReport: report)
             guard scanID == id else { return }
             guard let cached else { startScan(url, id: id); return }
             if cached.report.root !== root || isDemo {
