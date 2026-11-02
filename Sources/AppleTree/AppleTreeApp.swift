@@ -20,7 +20,9 @@ struct AppleTreeApp: App {
     }
 
     var body: some Scene {
-        WindowGroup("AppleTree") {
+        // A single `Window` scene (not `WindowGroup`) is listed in the Window menu, so the main
+        // window can be reopened after it's closed, and the Dock icon brings it back too.
+        Window("AppleTree", id: "main") {
             ContentView().environmentObject(store).environmentObject(store.cleanup)
                 // Rebuilding the tree re-reads every string after a language change.
                 .id(appLanguage)
@@ -34,7 +36,10 @@ struct AppleTreeApp: App {
                         AppIcon.apply()
                         NSApplication.shared.activate(ignoringOtherApps: true)
                     }
-                    if let index = CommandLine.arguments.firstIndex(of: "--scan"), CommandLine.arguments.count > index + 1 {
+                    // onAppear runs again whenever the window is reopened; only scan the launch path once.
+                    if !appDelegate.didHandleLaunchScan,
+                       let index = CommandLine.arguments.firstIndex(of: "--scan"), CommandLine.arguments.count > index + 1 {
+                        appDelegate.didHandleLaunchScan = true
                         store.scan(URL(fileURLWithPath: CommandLine.arguments[index + 1]))
                     }
                     #if DEBUG
@@ -70,6 +75,7 @@ struct AppleTreeApp: App {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     weak var store: AppStore?
+    var didHandleLaunchScan = false
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         // AppKit ignores a quit request while a window has a sheet attached, so System Settings'
