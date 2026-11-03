@@ -347,3 +347,22 @@ private final class CleanupTestLines: @unchecked Sendable {
     #expect(result.plannedBytes == 300)
     #expect(progress.values.last == "1/2")
 }
+
+@Test func cleanupScansGradleCachesOnlyWhenPresentAndIdle() throws {
+    let fixture = try CleanupFixture()
+    defer { fixture.remove() }
+    var settings = CleanupSettings()
+    settings.categories = [.toolCaches]
+    let missing = try fixture.cleaner.plan(paths: [], settings: settings, activity: CleanupActivity())
+    #expect(missing.files.isEmpty)
+    #expect(missing.skipped.isEmpty)
+    let jar = try fixture.file(".gradle/caches/modules-2/files-2.1/com.example/lib.jar")
+    _ = try fixture.file(".gradle/caches/modules-2/files-2.1/com.example/fresh.jar", old: false)
+    let plan = try fixture.cleaner.plan(paths: [], settings: settings, activity: CleanupActivity())
+    #expect(plan.files.map(\.url) == [jar])
+    let defaultPlan = try fixture.cleaner.plan(paths: [], settings: CleanupSettings(), activity: CleanupActivity())
+    #expect(defaultPlan.files.isEmpty)
+    let busy = try fixture.cleaner.plan(paths: [], settings: settings, activity: CleanupActivity(busyTools: ["gradle"]))
+    #expect(busy.files.isEmpty)
+    #expect(busy.skipped[.inUse] == 1)
+}

@@ -220,6 +220,10 @@ final class CleanupStore: ObservableObject {
             if name == "brew" { tools.insert("brew") }
             if name == "go" { tools.insert("go") }
         }
+        // Gradle runs as `java`, so look for its main classes in the full command lines.
+        let commands = try await CleanupCommand.run(URL(fileURLWithPath: "/bin/ps"), arguments: ["-axww", "-o", "args="])
+        guard commands.status == 0 else { throw CleanupFailure("cleanup.error.activity") }
+        if commands.text.contains("org.gradle.") { tools.insert("gradle") }
         return CleanupActivity(openPaths: paths, appIdentifiers: identifiers, appNames: names, busyTools: tools)
     }
 }

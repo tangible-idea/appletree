@@ -178,7 +178,7 @@
 "cleanup.category.appCaches" = "앱 캐시";
 "cleanup.category.appCaches.detail" = "사용자 Library의 오래된 캐시 파일. 사용 중인 앱과 보호한 데이터는 건너뜁니다.";
 "cleanup.category.toolCaches" = "개발 도구 다운로드 캐시";
-"cleanup.category.toolCaches.detail" = "npm·pip·Homebrew·Yarn·Go 캐시. 다음 사용 시 재다운로드나 재빌드가 필요할 수 있습니다.";
+"cleanup.category.toolCaches.detail" = "npm·pip·Homebrew·Yarn·Go·Gradle 캐시. 다음 사용 시 재다운로드나 재빌드가 필요할 수 있습니다.";
 "cleanup.category.oldLogs" = "오래된 로그와 오류 보고서";
 "cleanup.category.oldLogs.detail" = "사용자 Library의 로그·진단 보고서 중 log·crash·ips·diag 파일만 정리합니다.";
 "cleanup.age.caches" = "최근 캐시 유지";

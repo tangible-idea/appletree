@@ -178,7 +178,7 @@
 "cleanup.category.appCaches" = "App caches";
 "cleanup.category.appCaches.detail" = "Older files in your user Library caches. Active apps and protected data are skipped.";
 "cleanup.category.toolCaches" = "Developer tool download caches";
-"cleanup.category.toolCaches.detail" = "npm, pip, Homebrew, Yarn and Go caches. Packages may need to be downloaded or rebuilt again.";
+"cleanup.category.toolCaches.detail" = "npm, pip, Homebrew, Yarn, Go and Gradle caches. Packages may need to be downloaded or rebuilt again.";
 "cleanup.category.oldLogs" = "Old logs and crash reports";
 "cleanup.category.oldLogs.detail" = "Only log, crash, ips and diag files in your user Library logs and diagnostic reports.";
 "cleanup.age.caches" = "Keep recent caches";

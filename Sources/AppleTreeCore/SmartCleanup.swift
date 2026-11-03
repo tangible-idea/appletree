@@ -86,7 +86,10 @@ public struct CleanupResult: Codable, Sendable, Identifiable {
 /// Deletion uses directory descriptors so a replaced ancestor cannot redirect an unlink.
 public struct SmartCleanup: Sendable {
     private static let toolRoots = [".npm/_cacache", ".cache/pip", "Library/Caches/pip",
-                                    "Library/Caches/Homebrew/downloads", "Library/Caches/Yarn", "Library/Caches/go-build"]
+                                    "Library/Caches/Homebrew/downloads", "Library/Caches/Yarn", "Library/Caches/go-build",
+                                    ".gradle/caches"]
+    /// Tool caches the discovery tool doesn't report; scanned only when they exist.
+    private static let extraToolRoots = [".gradle/caches"]
     public let home: URL
     private let homeAlias: String
     private let owner: uid_t
@@ -171,8 +174,13 @@ public struct SmartCleanup: Sendable {
             found(file)
         }
 
+        var roots = paths
+        if settings.categories.contains(.toolCaches) {
+            roots += Self.extraToolRoots.map { home.appendingPathComponent($0) }
+                .filter { manager.fileExists(atPath: $0.path) }
+        }
         // Ancestors first; visited paths deduplicate Mole's overlapping cleanup sections.
-        for path in paths.sorted(by: { $0.path.count < $1.path.count }) {
+        for path in roots.sorted(by: { $0.path.count < $1.path.count }) {
             if reachedLimit { break }
             try visit(path)
         }
@@ -283,6 +291,7 @@ public struct SmartCleanup: Sendable {
             case "python": return lower.contains("pip")
             case "brew": return lower.contains("homebrew")
             case "go": return lower.contains("go-build")
+            case "gradle": return lower.contains("/.gradle/")
             default: return false
             }
         })
